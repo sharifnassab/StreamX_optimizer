@@ -29,7 +29,7 @@ COMMON_ENV = {
     "entryise_normalization_value": "RMSProp",
     "beta2_value":      0.999,
     "log_backend":      "wandb_offline",
-    "log_dir":          "/home/asharif/projects/def-sutton/asharif/StreamX_overshoot_prevention/Git/WandB_offline",
+    "log_dir":          "/home/asharif/StreamX_optimizer/WandB_offline",
     "project":          "test_stream_CC",
 }
 
@@ -73,8 +73,8 @@ if 0:
 # ------------------------------------------------------------------
 # --------- 2. Normally nothing below needs editing ----------------
 # ------------------------------------------------------------------
-REMOTE_RESULTS_ROOT = "/home/asharif/projects/def-sutton/asharif/MetaOptimize_Hierarchical/results/outputs"
-VENV_ACTIVATE     = "~/meta_opt_vnv/bin/activate"
+REMOTE_RESULTS_ROOT = "/home/asharif/StreamX_optimizer/results/outputs"
+VENV_ACTIVATE     = "~/venv_streamx/bin/activate"
 
 """
 make_slurm.py – writes all Slurm artefacts into ./slurm/

@@ -43,7 +43,7 @@ class _WandbLogger:
         import wandb
         import os
         os.environ.setdefault("WANDB_CONSOLE", "off")   # quieter console logs
-        
+
         self.wandb = wandb
         self.wandb.init(project=project, name=run_name, config=config or {})
     def log(self, metrics: Dict, step: Optional[int] = None):
@@ -68,8 +68,6 @@ class _WandbLogger_offline:
         **_,
     ):
         import os
-
-        # Ensure the directory exists and force offline behavior *before* importing wandb
         os.makedirs(log_dir, exist_ok=True)
         os.environ.setdefault("WANDB_MODE", "offline")  # never attempt network calls
         os.environ["WANDB_DIR"] = log_dir               # where run history gets stored
@@ -77,7 +75,6 @@ class _WandbLogger_offline:
         os.environ.setdefault("WANDB_CONSOLE", "off")   # quieter console logs
 
         import wandb
-
         self.wandb = wandb
         self.run = self.wandb.init(
             project=project,
@@ -88,9 +85,8 @@ class _WandbLogger_offline:
         )
 
     def log(self, metrics: Dict, step: Optional[int] = None):
-        # behaves like the online logger; W&B will write to local files only
         self.wandb.log(metrics, step=step)
-
+        
     def finish(self):
         try:
             self.run.finish()

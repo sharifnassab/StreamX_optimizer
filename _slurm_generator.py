@@ -92,7 +92,7 @@ def slurm_body(py_args: str, export_path: Path, venv_activate: str, py_entry: st
     return dedent(f"""\
         
         source {venv_activate}
-        module load python/3.11
+        module load python/3.10
         {cuda}
         $(sed -n "${{SLURM_ARRAY_TASK_ID}}p" < {export_path})
         echo "Task ${{SLURM_ARRAY_TASK_ID}} started on $(hostname) at $(date)"
