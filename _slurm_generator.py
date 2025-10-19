@@ -91,8 +91,14 @@ def slurm_body(py_args: str, export_path: Path, venv_activate: str, py_entry: st
     cuda = "module load cuda\n" if num_gpus>0 else ""
     return dedent(f"""\
         
-        source {venv_activate}
+        module purge
+        module load StdEnv/2023
         module load python/3.10
+        module load hwloc
+
+        source {venv_activate}
+        export PYTHONNOUSERSITE=1
+
         {cuda}
         $(sed -n "${{SLURM_ARRAY_TASK_ID}}p" < {export_path})
         echo "Task ${{SLURM_ARRAY_TASK_ID}} started on $(hostname) at $(date)"
