@@ -4,8 +4,8 @@ from _slurm_generator import generate_slurm
 RESOURCE_DEFAULTS = {
     "account":  "def-sutton",
     "max_time": "00:15:00",
-    "cpus":     2,
-    "mem":     '8G',
+    "cpus":     8,
+    "mem":     '16G',
     "gpus":    '0',   #  v100:1,  0
     "constraint": "granite"    # this is a CPU type on Nibi
 }
