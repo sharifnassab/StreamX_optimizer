@@ -318,7 +318,7 @@ if __name__ == '__main__':
     parser.add_argument('--lr', type=float, default=1.0)
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--lamda', type=float, default=0.0)
-    parser.add_argument('--total_steps', type=int, default=2_000_000)
+    parser.add_argument('--total_steps', type=int, default=2_0_000)
     parser.add_argument('--entropy_coeff', type=float, default=0.01)
     parser.add_argument('--kappa_policy', type=float, default=3.0)
     parser.add_argument('--kappa_value', type=float, default=2.0)
@@ -332,9 +332,9 @@ if __name__ == '__main__':
 
     # NEW: logging choices/params
     parser.add_argument('--log_backend', type=str, default='wandb_offline', choices=['tensorboard', 'wandb', 'wandb_offline', 'none'])
-    parser.add_argument('--log_dir', type=str, default='runs', help='TensorBoard log dir (if backend=tensorboard)')
-    parser.add_argument('--project', type=str, default='StreamX_Prediction_2', help='WandB project (if backend=wandb)')
-    parser.add_argument('--run_name', type=str, default='', help='Run name for logger') # __sqrt_coeff
+    parser.add_argument('--log_dir', type=str, default='"/home/asharif/StreamX_optimizer/StreamX_optimizer/WandB_offline"', help='WandB offline log dir (if backend=wandb_offline)')  # default='runs', help='TensorBoard log dir (if backend=tensorboard)')
+    parser.add_argument('--project', type=str, default='test_stream_CC', help='WandB project (if backend=wandb)')
+    parser.add_argument('--run_name', type=str, default='Laptop_', help='Run name for logger') # __sqrt_coeff
 
     args = parser.parse_args()
     
