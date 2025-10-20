@@ -320,11 +320,12 @@ def main(env_name, seed, lr, gamma, lamda, total_steps, entropy_coeff, kappa_pol
     env.close()
     logger.finish()  # NEW
 
-    save_dir = "data_stream_ac_{}_lr{}_gamma{}_lamda{}_entropy_coeff{}".format(env.spec.id, lr, gamma, lamda, entropy_coeff)
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
-    with open(os.path.join(save_dir, "seed_{}.pkl".format(seed)), "wb") as f:
-        pickle.dump((returns, term_time_steps, env_name), f)
+    if False:
+        save_dir = "data_stream_ac_{}_lr{}_gamma{}_lamda{}_entropy_coeff{}".format(env.spec.id, lr, gamma, lamda, entropy_coeff)
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+        with open(os.path.join(save_dir, "seed_{}.pkl".format(seed)), "wb") as f:
+            pickle.dump((returns, term_time_steps, env_name), f)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Stream AC(λ)')
@@ -345,6 +346,7 @@ if __name__ == '__main__':
     parser.add_argument('--debug', action='store_true')
     parser.add_argument('--overshooting_info', action='store_true')
     parser.add_argument('--render', action='store_true')
+
 
     # NEW: logging choices/params
     parser.add_argument('--log_backend', type=str, default='wandb', choices=['tensorboard', 'wandb', 'wandb_offline', 'none'])
