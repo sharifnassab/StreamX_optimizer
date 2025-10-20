@@ -1,3 +1,5 @@
+import time
+start_time = time.time()
 import os, pickle, argparse
 os.environ["GYM_DISABLE_PLUGIN_AUTOLOAD"] = "1"
 import torch
@@ -289,7 +291,10 @@ def main(env_name, seed, lr, gamma, lamda, total_steps, entropy_coeff, kappa_pol
 
             if debug:
                 print(f"Episodic Return: {ep_return}, Time Step {t} | "
-                      f"alpha_clipped%={alpha_clip_pct:.2f}, avg_min_inv_M={avg_min_inv_M}")
+                      #f"alpha_clipped%={alpha_clip_pct:.2f}, avg_min_inv_M={avg_min_inv_M}  |  " 
+                      f"time_elapsed={int(time.time() - start_time)}s" 
+                      )
+                
 
             returns.append(ep_return)
             term_time_steps.append(t)
