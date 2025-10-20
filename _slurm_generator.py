@@ -15,9 +15,6 @@ def fresh_slurm_dir() -> None:
 
 
 def cart_prod(d: dict[str, list]) -> list[dict]:
-    print('\n\n\n')
-    print(d)
-    print('\n\n\n')
     keys, vals = zip(*d.items())
     return [dict(zip(keys, v)) for v in itertools.product(*vals)]
 
@@ -94,7 +91,7 @@ def slurm_body(py_args: str, export_path: Path, venv_activate: str, py_entry: st
         module purge
         module load StdEnv/2023
         module load python/3.10
-        module load hwloc
+        module load mujoco/3.1.6
 
         source {venv_activate}
         export PYTHONNOUSERSITE=1

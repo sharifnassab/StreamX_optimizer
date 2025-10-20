@@ -289,10 +289,10 @@ def main(env_name, seed, lr, gamma, lamda, total_steps, entropy_coeff, kappa_pol
                 "prediction/episode_RMSE_end_of_episode_W": float(np.sqrt(ep_pred_error_end_of_episode_W['ep_MSE_error']))
             }, step=t)
 
-            if debug:
+            if debug or 1:
                 print(f"Episodic Return: {ep_return}, Time Step {t} | "
                       #f"alpha_clipped%={alpha_clip_pct:.2f}, avg_min_inv_M={avg_min_inv_M}  |  " 
-                      f"time_elapsed={int(time.time() - start_time)}s" 
+                      f"t_total={int(time.time() - start_time)}s" 
                       )
                 
 
@@ -323,7 +323,7 @@ if __name__ == '__main__':
     parser.add_argument('--lr', type=float, default=1.0)
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--lamda', type=float, default=0.0)
-    parser.add_argument('--total_steps', type=int, default=5_000)
+    parser.add_argument('--total_steps', type=int, default=2_000_000)
     parser.add_argument('--entropy_coeff', type=float, default=0.01)
     parser.add_argument('--kappa_policy', type=float, default=3.0)
     parser.add_argument('--kappa_value', type=float, default=2.0)
