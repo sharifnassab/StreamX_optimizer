@@ -3,9 +3,9 @@ from _slurm_generator import generate_slurm
 
 RESOURCE_DEFAULTS = {
     "account":  "def-sutton",
-    "max_time": "00:15:00",
-    "cpus":     8,
-    "mem":     '16G',
+    "max_time": "02:00:00",
+    "cpus":     1,
+    "mem":     '4G',
     "gpus":    '0',   #  v100:1,  0
     "constraint": "granite"    # this is a CPU type on Nibi
 }
@@ -18,7 +18,7 @@ PYTHON_ENTRYPOINT = "stream_ac_continuous_OptDesign_prediction.py"
 
 COMMON_ENV = {
     "env_name":         "Ant-v5",
-    "total_steps":      100_000,
+    "total_steps":      2_000_000,
     "seed":             0,
     "gamma":            0.99,
     "lamda":            0.0,

@@ -340,14 +340,14 @@ if __name__ == '__main__':
     parser.add_argument('--kappa_value', type=float, default=2.0)
     parser.add_argument('--observer_type', type=str, default='Obn', choices=['ObGD', 'ObGD_sq',  'ObGD_sq_plain', 'Obn', 'AdaptiveObGD'])
     parser.add_argument('--u_trace_value', type=float, default=0.99) # for Obn
-    parser.add_argument('--entryise_normalization_value', type=str, default='none') # 'none' or 'RMSProp' for Obn
+    parser.add_argument('--entryise_normalization_value', type=str, default='RMSProp') # 'none' or 'RMSProp' for Obn
     parser.add_argument('--beta2_value', type=float, default=0.999) # for Obn
     parser.add_argument('--debug', action='store_true')
     parser.add_argument('--overshooting_info', action='store_true')
     parser.add_argument('--render', action='store_true')
 
     # NEW: logging choices/params
-    parser.add_argument('--log_backend', type=str, default='none', choices=['tensorboard', 'wandb', 'wandb_offline', 'none'])
+    parser.add_argument('--log_backend', type=str, default='wandb', choices=['tensorboard', 'wandb', 'wandb_offline', 'none'])
     parser.add_argument('--log_dir', type=str, default='/home/asharif/StreamX_optimizer/WandB_offline', help='WandB offline log dir (if backend=wandb_offline)')  # default='runs', help='TensorBoard log dir (if backend=tensorboard)')
     parser.add_argument('--project', type=str, default='test_stream_CC', help='WandB project (if backend=wandb)')
     parser.add_argument('--run_name', type=str, default='', help='Run name for logger') # __sqrt_coeff

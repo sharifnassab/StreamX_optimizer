@@ -1,0 +1,41 @@
+{
+  "os":  "macOS-15.6.1-arm64-arm-64bit",
+  "python":  "CPython 3.11.9",
+  "startedAt":  "2025-10-20T21:02:05.029802Z",
+  "args":  [
+    "--debug",
+    "--total_steps=120000"
+  ],
+  "program":  "/Users/arsalan/Desktop/Codes/StreamX/StreamX_overshoot_prevention/stream_ac_continuous_OptDesign_prediction.py",
+  "codePath":  "stream_ac_continuous_OptDesign_prediction.py",
+  "codePathLocal":  "stream_ac_continuous_OptDesign_prediction.py",
+  "git":  {
+    "remote":  "git@github.com:sharifnassab/StreamX_optimizer.git",
+    "commit":  "e4d69929911d2c872b4009423b4725bf25acf583"
+  },
+  "email":  "a.sharifnassab@gmail.com",
+  "root":  "/Users/arsalan/Desktop/Codes/StreamX/StreamX_overshoot_prevention",
+  "host":  "MacBook-Air-4.local",
+  "executable":  "/Users/arsalan/Desktop/Codes/StreamX/streaming-drl-main/.venv/bin/python3",
+  "cpu_count":  8,
+  "cpu_count_logical":  8,
+  "disk":  {
+    "/":  {
+      "total":  "994662584320",
+      "used":  "574730264576"
+    }
+  },
+  "memory":  {
+    "total":  "25769803776"
+  },
+  "apple":  {
+    "name":  "Apple M3",
+    "ecpuCores":  4,
+    "pcpuCores":  4,
+    "gpuCores":  10,
+    "memoryGb":  24,
+    "swapTotalBytes":  "4294967296",
+    "ramTotalBytes":  "25769803776"
+  },
+  "writerId":  "cfvh6sohi72uwo14ruvrdrfujmnb7vms"
+}

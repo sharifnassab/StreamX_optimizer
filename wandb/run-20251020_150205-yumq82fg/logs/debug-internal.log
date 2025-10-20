@@ -1,0 +1,12 @@
+{"time":"2025-10-20T15:02:05.289591-06:00","level":"INFO","msg":"stream: starting","core version":"0.21.1"}
+{"time":"2025-10-20T15:02:05.687154-06:00","level":"INFO","msg":"stream: created new stream","id":"yumq82fg"}
+{"time":"2025-10-20T15:02:05.687188-06:00","level":"INFO","msg":"stream: started","id":"yumq82fg"}
+{"time":"2025-10-20T15:02:05.687223-06:00","level":"INFO","msg":"handler: started","stream_id":"yumq82fg"}
+{"time":"2025-10-20T15:02:05.687474-06:00","level":"INFO","msg":"writer: started","stream_id":"yumq82fg"}
+{"time":"2025-10-20T15:02:05.687473-06:00","level":"INFO","msg":"sender: started","stream_id":"yumq82fg"}
+{"time":"2025-10-20T15:04:28.170355-06:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-10-20T15:04:28.58105-06:00","level":"INFO","msg":"handler: operation stats","stats":{}}
+{"time":"2025-10-20T15:04:28.589111-06:00","level":"INFO","msg":"stream: closing","id":"yumq82fg"}
+{"time":"2025-10-20T15:04:28.589195-06:00","level":"INFO","msg":"handler: closed","stream_id":"yumq82fg"}
+{"time":"2025-10-20T15:04:28.590557-06:00","level":"INFO","msg":"sender: closed","stream_id":"yumq82fg"}
+{"time":"2025-10-20T15:04:28.590625-06:00","level":"INFO","msg":"stream: closed","id":"yumq82fg"}
