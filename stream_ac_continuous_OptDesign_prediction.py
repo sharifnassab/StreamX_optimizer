@@ -199,7 +199,7 @@ def compute_prediction_MSE_end_of_episode_W(list_ep_R, list_ep_S, value_net_obse
 
 
 def main(env_name, seed, lr, gamma, lamda, total_steps, entropy_coeff, kappa_policy, kappa_value, debug, overshooting_info, render=False,
-         log_backend="tensorboard", log_dir="runs", project="rl", run_name=None, observer_type='ObGD', u_trace_value=0.99, entryise_normalization_value='none', beta2_value=0.999):
+         log_backend="tensorboard", log_dir="runs", project="rl", run_name=None, observer_type='ObGD', u_trace_value=0.99, entryise_normalization_value='none', beta2_value=0.999, max_time='1000:00:00'):
     torch.manual_seed(seed); np.random.seed(seed)
     env = gym.make(env_name, render_mode='human') if render else gym.make(env_name)
     env = gym.wrappers.FlattenObservation(env)
@@ -211,6 +211,7 @@ def main(env_name, seed, lr, gamma, lamda, total_steps, entropy_coeff, kappa_pol
     agent = StreamAC(n_obs=env.observation_space.shape[0], n_actions=env.action_space.shape[0], lr=lr, gamma=gamma, lamda=lamda, kappa_policy=kappa_policy, kappa_value=kappa_value, observer_type=observer_type, u_trace_value=u_trace_value, entryise_normalization_value=entryise_normalization_value, beta2_value=beta2_value)
     if debug:
         print("seed: {}".format(seed), "env: {}".format(env.spec.id))
+    max_time_in_seconds = sum(int(x) * 60 ** i for i, x in enumerate(reversed(max_time.split(":"))))
 
     # NEW: init logger (TB or WandB)
     config = {
@@ -239,6 +240,7 @@ def main(env_name, seed, lr, gamma, lamda, total_steps, entropy_coeff, kappa_pol
     ep_alpha_clipped_count = 0
     ep_min_inv_M_sum = 0.0
     list_ep_R, list_ep_v, list_ep_S = [], [], []
+    epoch_start_time = time.time()
 
     for t in range(1, total_steps+1):
         a = agent.sample_action(s)
@@ -295,7 +297,14 @@ def main(env_name, seed, lr, gamma, lamda, total_steps, entropy_coeff, kappa_pol
                       f"t_total={int(time.time() - start_time)}s" 
                       )
                 
+            # Terminate early if close to max_time
+            max_epoch_time = max(time.time() - epoch_start_time, max_epoch_time)
+            epoch_start_time = time.time()
+            if time.time()-start_time > max_time_in_seconds - 30 - 1.2*max_epoch_time:
+                print("Terminating early due to time constraint...")
+                break
 
+            
             returns.append(ep_return)
             term_time_steps.append(t)
 
@@ -324,6 +333,7 @@ if __name__ == '__main__':
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--lamda', type=float, default=0.0)
     parser.add_argument('--total_steps', type=int, default=2_000_000)
+    parser.add_argument('--max_time', type=str, default='1000:00:00') # in HH:MM:SS
     parser.add_argument('--entropy_coeff', type=float, default=0.01)
     parser.add_argument('--kappa_policy', type=float, default=3.0)
     parser.add_argument('--kappa_value', type=float, default=2.0)
@@ -340,10 +350,12 @@ if __name__ == '__main__':
     parser.add_argument('--log_dir', type=str, default='/home/asharif/StreamX_optimizer/WandB_offline', help='WandB offline log dir (if backend=wandb_offline)')  # default='runs', help='TensorBoard log dir (if backend=tensorboard)')
     parser.add_argument('--project', type=str, default='test_stream_CC', help='WandB project (if backend=wandb)')
     parser.add_argument('--run_name', type=str, default='', help='Run name for logger') # __sqrt_coeff
+    parser.add_argument('--uID', type=str, default='', help='') # not used
+
 
     args = parser.parse_args()
     
     main(args.env_name, args.seed, args.lr, args.gamma, args.lamda, args.total_steps, args.entropy_coeff,
          args.kappa_policy, args.kappa_value, args.debug, args.overshooting_info, args.render,
          log_backend=args.log_backend, log_dir=args.log_dir, project=f'{args.project}_{args.env_name}', run_name=f'{args.run_name}',
-         observer_type=args.observer_type, u_trace_value=args.u_trace_value, entryise_normalization_value=args.entryise_normalization_value, beta2_value=args.beta2_value)
+         observer_type=args.observer_type, u_trace_value=args.u_trace_value, entryise_normalization_value=args.entryise_normalization_value, beta2_value=args.beta2_value, max_time=args.max_time)
