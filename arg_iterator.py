@@ -5,7 +5,7 @@ RESOURCE_DEFAULTS = {
     "account":  "def-sutton",
     "max_time": "00:15:00",
     "cpus":     8,
-    "mem":     '4G',
+    "mem":     '16G',
     "gpus":    '0',   #  v100:1,  0
     "constraint": "granite"    # this is a CPU type on Nibi
 }
