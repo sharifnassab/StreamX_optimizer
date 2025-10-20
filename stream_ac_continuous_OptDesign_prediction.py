@@ -241,6 +241,7 @@ def main(env_name, seed, lr, gamma, lamda, total_steps, entropy_coeff, kappa_pol
     ep_min_inv_M_sum = 0.0
     list_ep_R, list_ep_v, list_ep_S = [], [], []
     epoch_start_time = time.time()
+    max_epoch_time = 0.0
 
     for t in range(1, total_steps+1):
         a = agent.sample_action(s)
