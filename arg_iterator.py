@@ -18,10 +18,10 @@ PYTHON_ENTRYPOINT = "stream_ac_continuous.py"
 
 COMMON_ENV = {
     #"env_name":         "Ant-v5",
-    "total_steps":      2_00_000,
+    "total_steps":      2_000_000,
     #
     "policy_optimizer": 'ObGD',
-    "policy_kappa":     2.0,
+    "policy_kappa":     3.0,
     "policy_gamma":     0.99,
     "policy_lamda":     0.0,
     "policy_lr":        1.0,
@@ -35,7 +35,7 @@ COMMON_ENV = {
     #
     "log_backend":      "wandb_offline",
     "log_dir":          "/home/asharif/scratch/StreamX_optimizer/WandB_offline", #"/home/asharif/StreamX_optimizer/WandB_offline",
-    "project":          "StreamX_OptDesign_test",
+    "project":          "StreamX_OptDesign",
 }
 
 
