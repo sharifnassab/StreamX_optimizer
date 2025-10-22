@@ -5,7 +5,7 @@ RESOURCE_DEFAULTS = {
     "account":  "def-sutton",
     "max_time": "02:00:00",
     "cpus":     1,
-    "mem":     '4G',
+    "mem":     '2G',
     "gpus":    '0',   #  v100:1,  0
     "constraint": "granite"    # this is a CPU type on Nibi
 }
@@ -14,23 +14,28 @@ RESOURCE_OVERRIDES = {
     # ("BP", "ResNet18"): {"time": "08:00:00", "gpus": 2, "mem": "32G"},
 }
 
-PYTHON_ENTRYPOINT = "stream_ac_continuous_OptDesign_prediction.py"
+PYTHON_ENTRYPOINT = "stream_ac_continuous.py"
 
 COMMON_ENV = {
-    "env_name":         "Ant-v5",
+    #"env_name":         "Ant-v5",
     "total_steps":      2_000_000,
-    "seed":             0,
-    "gamma":            0.99,
-    "lamda":            0.0,
-    "kappa_policy":     3.0,
-    "kappa_value":      2.0,
-    "observer_type":    "Obn",
-    "u_trace_value":    0.99,
-    "entryise_normalization_value": "RMSProp",
-    "beta2_value":      0.999,
+    #
+    "policy_optimizer": 'ObGD',
+    "policy_kappa":     3.0,
+    "policy_gamma":     0.99,
+    "policy_lamda":     0.0,
+    "policy_lr":        1.0,
+    "policy_entropy_coeff": 0.01,
+    #
+    "critic_gamma":     0.99,
+    "critic_lamda":     0.0,
+    "critic_lr":        1.0,
+    #
+    "observer_optimizer": 'none',
+    #
     "log_backend":      "wandb_offline",
     "log_dir":          "/home/asharif/StreamX_optimizer/WandB_offline",
-    "project":          "test_stream_CC",
+    "project":          "StreamX_OptDesign",
 }
 
 
@@ -43,23 +48,25 @@ run_description = 'test0'
 
 HYPER_SWEEPS = []
 
-if 1:
-    HYPER_SWEEPS.append({"kappa_value":      [2.0],})
 
-if 0:
+if 0: 
     HYPER_SWEEPS.append({
-        "beta_reg":             [1],
-        "beta_averaging_type":  ['weighted'],
-        "max_time":             ["00:15:00"],       # time or "default"
-    })
-if 0:
-    HYPER_SWEEPS.append({
-        "beta_reg":             [1,10],
-        "beta_averaging_type":  ['uniform'],
-        "stepsize_blocks":      ["[2,2]"],
-        "max_time":             ["default"],       # time or "default"
+        "env_name":             ['Ant-v5', 'HalfCheetah-v5', 'Hopper-v5', 'Walker2d-v5', 'Humanoid-v5'],
+        "critic_optimizer":     ['ObGD', 'AdaptiveObGD', 'ObGD_sq', 'ObGD_sq_plain'],
+        "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
+        "seed":                 [0],
     })
 
+if 1: 
+    HYPER_SWEEPS.append({
+        "env_name":             ['Ant-v5', 'HalfCheetah-v5', 'Hopper-v5', 'Walker2d-v5', 'Humanoid-v5'],
+        "critic_optimizer":     ['Obn'],
+        "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
+        "critic_entryise_normalization": ['none','RMSProp'],
+        "critic_beta2":         [0.999],
+        "critic_u_trace":       [0.99],
+        "seed":                 [0],
+    })
 
 
 

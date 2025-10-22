@@ -64,7 +64,23 @@ class Critic(nn.Module):
         x = F.layer_norm(x, x.size())
         x = F.leaky_relu(x)
         return self.linear_layer(x)
-
+    
+def spec_to_name(spec: dict) -> str:
+    short_hand_mapping={'optimizer':    '',
+                        'gamma':        '_gam',
+                        'lamda':        'lam',
+                        'kappa':        'k',
+                        'entryise_normalization': 'en',
+                        'beta2':        'b2',
+                        'u_trace':      'u',
+                        'entropy_coeff':'ent',
+                        'lr':           'lr',
+                        }
+    list_params = []
+    for key in short_hand_mapping:
+        if key in spec:
+            list_params.append(f"{short_hand_mapping[key]}_{spec[key]}")
+    return '_'.join(list_params) if list_params else ''
 
 class StreamAC(nn.Module):
     def __init__(
@@ -266,23 +282,24 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
     )
 
     # ---- Logging ----
+    run_name = (f'{env.spec.id}_____Policy_{spec_to_name(policy_spec)}_____Critic_{spec_to_name(critic_spec)}' +
+                (f'_____Observer_{spec_to_name(observer_spec)}' if agent.observer_exists else '') + 
+                (f"____{logging_spec.get('run_name', '')}" if (logging_spec.get('run_name', '')!='') else ''))
     config = {
         "env_name": env_name, 
         "seed": seed,
         "policy": policy_spec,
         "critic": critic_spec,
         "observer": observer_spec,
+        "run_name": run_name,
     }
-
-    run_name = logging_spec.get('run_name')
-    auto_name = f"{env.spec.id}"
-    final_run_name = auto_name if not run_name else f"{auto_name}__{run_name}"
+    print(f"Run Name: {run_name}")
 
     logger = get_logger(
         backend=logging_spec.get('backend', 'wandb'),
         log_dir=logging_spec.get('dir', 'runs'),
         project=logging_spec.get('project', 'StreamX_OptDesign'),
-        run_name=final_run_name,
+        run_name=run_name+f'__seed{seed}',
         config=config,
     )
     logger.watch([agent.policy_net, agent.critic_net], log="all")  # no-op for TB
@@ -396,34 +413,34 @@ if __name__ == '__main__':
     parser.add_argument('--total_steps', type=int, default=2_000_000)
     parser.add_argument('--max_time', type=str, default='1000:00:00')  # in HH:MM:SS
 
-    parser.add_argument('--policy_kappa', type=float, default=3.0)
     parser.add_argument('--policy_optimizer', type=str, default='ObGD', choices=['ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'AdaptiveObGD'])
-    parser.add_argument('--policy_u_trace', type=float, default=0.99)  # for Obn
-    parser.add_argument('--policy_entryise_normalization', type=str, default='RMSProp')  # 'none' or 'RMSProp'
-    parser.add_argument('--policy_beta2', type=float, default=0.999)  # for Obn
+    parser.add_argument('--policy_kappa', type=float, default=3.0)
     parser.add_argument('--policy_gamma', type=float, default=0.99)
     parser.add_argument('--policy_lamda', type=float, default=0.0)
     parser.add_argument('--policy_lr', type=float, default=1.0)
     parser.add_argument('--policy_entropy_coeff', type=float, default=0.01)  # was entropy_coeff
-
+    parser.add_argument('--policy_u_trace', type=float, default=0.99)  # for Obn
+    parser.add_argument('--policy_entryise_normalization', type=str, default='RMSProp')  # 'none' or 'RMSProp'
+    parser.add_argument('--policy_beta2', type=float, default=0.999)  # for Obn
+    
     parser.add_argument('--critic_optimizer', type=str, default='ObGD', choices=['ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'AdaptiveObGD'])
     parser.add_argument('--critic_kappa', type=float, default=2.0)
-    parser.add_argument('--critic_u_trace', type=float, default=0.99)  # for Obn
-    parser.add_argument('--critic_entryise_normalization', type=str, default='RMSProp')  # 'none' or 'RMSProp'
-    parser.add_argument('--critic_beta2', type=float, default=0.999)  # for Obn
     parser.add_argument('--critic_gamma', type=float, default=0.99)
     parser.add_argument('--critic_lamda', type=float, default=0.0)
     parser.add_argument('--critic_lr', type=float, default=1.0)
-
-    parser.add_argument('--observer_kappa', type=float, default=2.0)
+    parser.add_argument('--critic_u_trace', type=float, default=0.99)  # for Obn
+    parser.add_argument('--critic_entryise_normalization', type=str, default='RMSProp')  # 'none' or 'RMSProp'
+    parser.add_argument('--critic_beta2', type=float, default=0.999)  # for Obn
+    
     parser.add_argument('--observer_optimizer', type=str, default='none', choices=['none', 'ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'AdaptiveObGD'])
-    parser.add_argument('--observer_u_trace', type=float, default=0.99)  # for Obn
-    parser.add_argument('--observer_entryise_normalization', type=str, default='RMSProp')  # 'none' or 'RMSProp'
-    parser.add_argument('--observer_beta2', type=float, default=0.999)  # for Obn
+    parser.add_argument('--observer_kappa', type=float, default=2.0)
     parser.add_argument('--observer_gamma', type=float, default=0.99)
     parser.add_argument('--observer_lamda', type=float, default=0.0)
     parser.add_argument('--observer_lr', type=float, default=1.0)
-
+    parser.add_argument('--observer_u_trace', type=float, default=0.99)  # for Obn
+    parser.add_argument('--observer_entryise_normalization', type=str, default='RMSProp')  # 'none' or 'RMSProp'
+    parser.add_argument('--observer_beta2', type=float, default=0.999)  # for Obn
+    
     parser.add_argument('--log_backend', type=str, default='none', choices=['none', 'tensorboard', 'wandb', 'wandb_offline'])
     parser.add_argument('--log_dir', type=str, default='/home/asharif/StreamX_optimizer/WandB_offline', help='WandB offline log dir (if backend=wandb_offline)')
     parser.add_argument('--project', type=str, default='test_stream_CC', help='WandB project (if backend=wandb)')
