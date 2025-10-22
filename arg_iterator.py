@@ -3,7 +3,7 @@ from _slurm_generator import generate_slurm
 
 RESOURCE_DEFAULTS = {
     "account":  "def-sutton",
-    "max_time": "02:00:00",
+    "max_time": "01:00:00",
     "cpus":     1,
     "mem":     '2G',
     "gpus":    '0',   #  v100:1,  0
@@ -18,7 +18,7 @@ PYTHON_ENTRYPOINT = "stream_ac_continuous.py"
 
 COMMON_ENV = {
     #"env_name":         "Ant-v5",
-    "total_steps":      2_000_000,
+    "total_steps":      2_00_000,
     #
     "policy_optimizer": 'ObGD',
     "policy_kappa":     2.0,
@@ -33,9 +33,9 @@ COMMON_ENV = {
     #
     "observer_optimizer": 'none',
     #
-    "log_backend":      "wandb_offline_kappa2",
-    "log_dir":          "/home/asharif/StreamX_optimizer/WandB_offline",
-    "project":          "StreamX_OptDesign",
+    "log_backend":      "wandb_offline",
+    "log_dir":          "/home/asharif/scratch/StreamX_optimizer/WandB_offline", #"/home/asharif/StreamX_optimizer/WandB_offline",
+    "project":          "StreamX_OptDesign_test",
 }
 
 
@@ -48,24 +48,27 @@ run_description = 'test0'
 
 HYPER_SWEEPS = []
 
+environments = ['Ant-v5'] #, 'HalfCheetah-v5', 'Hopper-v5', 'Walker2d-v5', 'Humanoid-v5']
+seeds = [i for i in range(1)]
+
 
 if 1: 
     HYPER_SWEEPS.append({
-        "env_name":             ['Ant-v5', 'HalfCheetah-v5', 'Hopper-v5', 'Walker2d-v5', 'Humanoid-v5'],
+        "env_name":             environments,
         "critic_optimizer":     ['ObGD', 'AdaptiveObGD', 'ObGD_sq', 'ObGD_sq_plain'],
         "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
-        "seed":                 [i for i in range(30)],
+        "seed":                 seeds,
     })
 
-if 1: 
+if 0: 
     HYPER_SWEEPS.append({
-        "env_name":             ['Ant-v5', 'HalfCheetah-v5', 'Hopper-v5', 'Walker2d-v5', 'Humanoid-v5'],
+        "env_name":             environments,
         "critic_optimizer":     ['Obn'],
         "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
         "critic_entryise_normalization": ['none','RMSProp'],
         "critic_beta2":         [0.999],
         "critic_u_trace":       [0.99],
-        "seed":                 [i for i in range(30)],
+        "seed":                 seeds,
     })
 
 
@@ -80,7 +83,7 @@ if 1:
 # ------------------------------------------------------------------
 # --------- 2. Normally nothing below needs editing ----------------
 # ------------------------------------------------------------------
-REMOTE_RESULTS_ROOT = "/home/asharif/StreamX_optimizer/results/outputs"
+REMOTE_RESULTS_ROOT = "/home/asharif/scratch/StreamX_optimizer/outputs"
 VENV_ACTIVATE     = "~/venv_streamx/bin/activate"
 
 """
