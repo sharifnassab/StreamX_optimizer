@@ -21,7 +21,7 @@ COMMON_ENV = {
     "total_steps":      2_000_000,
     #
     "policy_optimizer": 'ObGD',
-    "policy_kappa":     3.0,
+    "policy_kappa":     2.0,
     "policy_gamma":     0.99,
     "policy_lamda":     0.0,
     "policy_lr":        1.0,
@@ -33,7 +33,7 @@ COMMON_ENV = {
     #
     "observer_optimizer": 'none',
     #
-    "log_backend":      "wandb_offline",
+    "log_backend":      "wandb_offline_kappa2",
     "log_dir":          "/home/asharif/StreamX_optimizer/WandB_offline",
     "project":          "StreamX_OptDesign",
 }
@@ -54,7 +54,7 @@ if 1:
         "env_name":             ['Ant-v5', 'HalfCheetah-v5', 'Hopper-v5', 'Walker2d-v5', 'Humanoid-v5'],
         "critic_optimizer":     ['ObGD', 'AdaptiveObGD', 'ObGD_sq', 'ObGD_sq_plain'],
         "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
-        "seed":                 [i+1 for i in range(29)],
+        "seed":                 [i for i in range(30)],
     })
 
 if 1: 
@@ -65,7 +65,7 @@ if 1:
         "critic_entryise_normalization": ['none','RMSProp'],
         "critic_beta2":         [0.999],
         "critic_u_trace":       [0.99],
-        "seed":                 [i+1 for i in range(29)],
+        "seed":                 [i for i in range(30)],
     })
 
 

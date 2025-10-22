@@ -359,8 +359,8 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
                 "episode/return": float(ep_return),
                 "episode/length": float(ep_len),
                 "policy/avg_min_inv_M": float(avg_min_inv_M) if avg_min_inv_M is not None else None,
-                "critic_prediction/episode_MSE":  float(ep_pred_error_critic['ep_MSE_error']),
-                "critic_prediction/episode_abs":  float(ep_pred_error_critic['ep_abs_error']),
+                #"critic_prediction/episode_MSE":  float(ep_pred_error_critic['ep_MSE_error']),
+                #"critic_prediction/episode_abs":  float(ep_pred_error_critic['ep_abs_error']),
                 "critic_prediction/episode_RMSE": float(np.sqrt(ep_pred_error_critic['ep_MSE_error'])),
             }
             if agent.observer_exists:
