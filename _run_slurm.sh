@@ -3,7 +3,7 @@
 # --------------------------------------------------------
 # Run from repo root on the cluster *after* git pull.
 
-REMOTE_RESULTS_ROOT=/home/asharif/StreamX_optimizer/results/outputs
+REMOTE_RESULTS_ROOT=/home/asharif/scratch/StreamX_optimizer/outputs
 SLURM_DIR=__slurm
 
 set -euo pipefail
