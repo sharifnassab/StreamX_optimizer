@@ -49,15 +49,15 @@ run_description = 'test0'
 HYPER_SWEEPS = []
 
 
-if 0: 
+if 1: 
     HYPER_SWEEPS.append({
         "env_name":             ['Ant-v5', 'HalfCheetah-v5', 'Hopper-v5', 'Walker2d-v5', 'Humanoid-v5'],
         "critic_optimizer":     ['ObGD', 'AdaptiveObGD', 'ObGD_sq', 'ObGD_sq_plain'],
         "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
-        "seed":                 [0],
+        "seed":                 [i+1 for i in range(29)],
     })
 
-if 1: 
+if 0: 
     HYPER_SWEEPS.append({
         "env_name":             ['Ant-v5', 'HalfCheetah-v5', 'Hopper-v5', 'Walker2d-v5', 'Humanoid-v5'],
         "critic_optimizer":     ['Obn'],
