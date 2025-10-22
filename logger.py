@@ -106,13 +106,13 @@ class _WandbLogger_offline:
 
 def get_logger(backend: str = "tensorboard", **kwargs):
     backend = (backend or "tensorboard").lower()
-    if backend == "tensorboard":
+    if backend.lower() == "tensorboard":
         return _TBLogger(**kwargs)
-    elif backend == "wandb":
+    elif backend.lower() == "wandb":
         return _WandbLogger(**kwargs)
-    elif backend == "wandb_offline":
+    elif backend.lower() == "wandb_offline":
         return _WandbLogger_offline(**kwargs)
-    elif backend in ("none", "null", "off"):
+    elif backend.lower() in ("none", "null", "off"):
         return _NullLogger()
     else:
         raise ValueError(f"Unknown logger backend: {backend}")
