@@ -3,7 +3,7 @@ from _slurm_generator import generate_slurm
 
 RESOURCE_DEFAULTS = {
     "account":  "def-sutton",
-    "max_time": "01:00:00",
+    "max_time": "01:30:00",
     "cpus":     1,
     "mem":     '2G',
     "gpus":    '0',   #  v100:1,  0
@@ -21,7 +21,6 @@ COMMON_ENV = {
     "total_steps":      2_000_000,
     #
     "policy_optimizer": 'ObGD',
-    "policy_kappa":     3.0,
     "policy_gamma":     0.99,
     "policy_lamda":     0.0,
     "policy_lr":        1.0,
@@ -48,23 +47,25 @@ run_description = 'test0'
 
 HYPER_SWEEPS = []
 
-environments = ['Ant-v5'] #, 'HalfCheetah-v5', 'Hopper-v5', 'Walker2d-v5', 'Humanoid-v5']
-seeds = [i for i in range(1)]
+environments = ['Ant-v5', 'HalfCheetah-v5', 'Hopper-v5', 'Walker2d-v5', 'Humanoid-v5']
+seeds = [i for i in range(30)]
+list_policy_kappa = [3.0, 2.0]
 
 
 if 1: 
     HYPER_SWEEPS.append({
         "env_name":             environments,
+        "policy_kappa":         list_policy_kappa,
         "critic_optimizer":     ['ObGD', 'AdaptiveObGD', 'ObGD_sq', 'ObGD_sq_plain'],
         "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
         "seed":                 seeds,
     })
 
-if 0: 
+if 1: 
     HYPER_SWEEPS.append({
         "env_name":             environments,
-        "critic_optimizer":     ['Obn'],
-        "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
+        "policy_kappa":         list_policy_kappa,
+        "critic_kappa":         [1.5, 2.0, 3.0], #[1.0, 1.5, 2.0, 3.0],
         "critic_entryise_normalization": ['none','RMSProp'],
         "critic_beta2":         [0.999],
         "critic_u_trace":       [0.99],

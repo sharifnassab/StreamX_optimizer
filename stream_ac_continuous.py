@@ -356,8 +356,8 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
             avg_min_inv_M = ep_min_inv_M_sum / max(ep_steps, 1) if ep_min_inv_M_sum > 0 else None
 
             log_payload = {
-                "episode/return": float(ep_return),
-                "episode/length": float(ep_len),
+                "_episode/return": float(ep_return),
+                "_episode/length": float(ep_len),
                 "policy/avg_min_inv_M": float(avg_min_inv_M) if avg_min_inv_M is not None else None,
                 #"critic_prediction/episode_MSE":  float(ep_pred_error_critic['ep_MSE_error']),
                 #"critic_prediction/episode_abs":  float(ep_pred_error_critic['ep_abs_error']),
@@ -491,7 +491,7 @@ if __name__ == '__main__':
     # ---- Logging dict ----
     logging_spec = {
         'backend': args.log_backend,
-        'dir': args.log_dir,
+        'dir': f'{args.log_dir}_{args.env_name}',
         'project': f'{args.project}_{args.env_name}',
         'run_name': args.run_name,
         'uID': args.uID,
