@@ -57,7 +57,7 @@ if 1:
         "seed":                 [i+1 for i in range(29)],
     })
 
-if 0: 
+if 1: 
     HYPER_SWEEPS.append({
         "env_name":             ['Ant-v5', 'HalfCheetah-v5', 'Hopper-v5', 'Walker2d-v5', 'Humanoid-v5'],
         "critic_optimizer":     ['Obn'],
