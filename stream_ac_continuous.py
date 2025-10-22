@@ -1,3 +1,5 @@
+import time
+start_time = time.time()
 import os, pickle, argparse
 os.environ["GYM_DISABLE_PLUGIN_AUTOLOAD"] = "1"
 import torch
@@ -6,13 +8,19 @@ import torch.nn as nn
 import gymnasium as gym
 import torch.nn.functional as F
 from torch.distributions import Normal
-from optim import ObGD as Optimizer
+
+from optim import ObGD_sq as ObGDsq_Optimizer
+from optim import ObGD_sq_plain as ObGDsqPlain_Optimizer
+from optim import ObGD as ObGD_Optimizer
+from optim import AdaptiveObGD as AdaptiveObGD_Optimizer
+from optim import Obn as Obn_Optimizer
 from time_wrapper import AddTimeInfo
 from normalization_wrappers import NormalizeObservation, ScaleReward
 from sparse_init import sparse_init
 
 # NEW: our tiny logger (wandb or tensorboard)
 from logger import get_logger
+print('All imports done. 2')  
 
 def initialize_weights(m):
     if isinstance(m, nn.Linear):
@@ -57,29 +65,99 @@ class Critic(nn.Module):
         x = F.leaky_relu(x)
         return self.linear_layer(x)
 
+
 class StreamAC(nn.Module):
-    def __init__(self, n_obs=11, n_actions=3, hidden_size=128, lr=1.0, gamma=0.99, lamda=0.8, kappa_policy=3.0, kappa_value=2.0):
-        super(StreamAC, self).__init__()
-        self.gamma = gamma
+    def __init__(
+        self,
+        n_obs: int,
+        n_actions: int,
+        policy_spec: dict,
+        critic_spec: dict,
+        observer_spec: dict = {'optimizer':'none'},
+        hidden_size: int = 128,
+    ):
+        super().__init__()
+
+        # Keep the raw specs (useful for logging/inspect)
+        self.policy_spec   = dict(policy_spec or {})
+        self.critic_spec   = dict(critic_spec or {})
+        self.observer_spec = dict(observer_spec or {})
+
+        # ---- Nets ----
         self.policy_net = Actor(n_obs=n_obs, n_actions=n_actions, hidden_size=hidden_size)
-        self.value_net = Critic(n_obs=n_obs, hidden_size=hidden_size)
-        self.optimizer_policy = Optimizer(self.policy_net.parameters(), lr=lr, gamma=gamma, lamda=lamda, kappa=kappa_policy)
-        self.optimizer_value = Optimizer(self.value_net.parameters(), lr=lr, gamma=gamma, lamda=lamda, kappa=kappa_value)
+        self.critic_net = Critic(n_obs=n_obs, hidden_size=hidden_size)
+        self.observer_net = Critic(n_obs=n_obs, hidden_size=hidden_size)
+
+        # ---- Hyperparameters ----
+        self.gamma_policy   = float(self.policy_spec.get('gamma'))
+        self.gamma_critic   = float(self.critic_spec.get('gamma'))
+        self.entropy_coeff  = float(self.policy_spec.get('entropy_coeff'))
+        self.observer_exists = str(self.observer_spec.get('optimizer', 'none')).lower() != 'none'
+        if self.observer_exists:
+            self.gamma_observer = float(self.observer_spec.get('gamma'))    
+        
+        # ---- Optimizers (per-spec) ----
+        self.optimizer_policy   = self._build_optimizer(self.policy_net.parameters(),   self.policy_spec,   role="policy")
+        self.optimizer_critic   = self._build_optimizer(self.critic_net.parameters(),   self.critic_spec,   role="critic")
+        self.optimizer_observer = (self._build_optimizer(self.observer_net.parameters(), self.observer_spec, role="observer") if self.observer_exists else None)
+
+
+    def _build_optimizer(self, params, spec: dict, role: str):
+        spec = spec or {}
+        opt_name = spec.get('optimizer', 'none').strip().lower()
+        if opt_name == 'none':
+            return None
+        
+        lr     = float(spec.get('lr', 3e-4))
+        gamma  = float(spec.get('gamma'))
+        lamda  = float(spec.get('lamda'))
+        kappa  = float(spec.get('kappa'))
+
+        # Only for Obn
+        u_trace = float(spec.get('u_trace', 0.99))
+        entryise_normalization = spec.get('entryise_normalization', 'none')
+        beta2  = float(spec.get('beta2', 0.999))
+
+
+        if opt_name == 'obgd':
+            return ObGD_Optimizer(params, lr=lr, gamma=gamma, lamda=lamda, kappa=kappa)
+        if opt_name in ('adaptiveobgd', 'adaptive_obgd'):
+            return AdaptiveObGD_Optimizer(params, lr=lr, gamma=gamma, lamda=lamda, kappa=kappa)
+        if opt_name == 'obgd_sq':
+            return ObGDsq_Optimizer(params, lr=lr, gamma=gamma, lamda=lamda, kappa=kappa)
+        if opt_name == 'obgd_sq_plain':
+            return ObGDsqPlain_Optimizer(params, lr=lr, gamma=gamma, lamda=lamda, kappa=kappa)
+        if opt_name == 'obn':
+            return Obn_Optimizer(
+                params, lr=lr, gamma=gamma, lamda=lamda, kappa=kappa,
+                u_trace=u_trace, entryise_normalization=entryise_normalization, beta2=beta2
+            )
+        raise ValueError(f"Unknown optimizer '{spec.get('optimizer')}' for role '{role}'.")
+
 
     def pi(self, x):
         return self.policy_net(x)
 
     def v(self, x):
-        return self.value_net(x)
+        return self.critic_net(x)
+    
+    def v_observer(self, x):
+        return self.observer_net(x)
 
     def sample_action(self, s):
         x = torch.from_numpy(s).float()
         mu, std = self.pi(x)
         dist = Normal(mu, std)
-        return dist.sample().numpy()
+        return dist.sample().detach().numpy()
 
-    # CHANGED: now returns an info dict with metrics (incl. TD error)
-    def update_params(self, s, a, r, s_prime, done, entropy_coeff, overshooting_info=False):
+    def compute_grad_v(self,optimizer,v):
+        value_params_grouped = [list(g["params"]) for g in optimizer.param_groups]
+        value_params = [p for grp in value_params_grouped for p in grp]
+        v_grads_flat = torch.autograd.grad(v.sum(), value_params)
+        it = iter(v_grads_flat)
+        return [[next(it) for _ in grp] for grp in value_params_grouped]
+
+    def update_params(self, s, a, r, s_prime, done):
         done_mask = 0 if done else 1
         s = torch.tensor(np.array(s), dtype=torch.float)
         a = torch.tensor(np.array(a), dtype=torch.float)
@@ -87,32 +165,58 @@ class StreamAC(nn.Module):
         s_prime = torch.tensor(np.array(s_prime), dtype=torch.float)
         done_mask_t = torch.tensor(np.array(done_mask), dtype=torch.float)
 
-        v_s = self.v(s)
-        v_prime = self.v(s_prime)
-        td_target = r + self.gamma * v_prime * done_mask_t
-        delta = td_target - v_s  # TD error
+        v_s, v_prime = self.v(s), self.v(s_prime)
+
+        td_target_critic = r + self.gamma_critic * v_prime * done_mask_t
+        td_target_policy = r + self.gamma_policy * v_prime * done_mask_t
+        delta_critic = td_target_critic - v_s
+        delta_policy = td_target_policy - v_s
 
         mu, std = self.pi(s)
         dist = Normal(mu, std)
 
-        # Losses
         log_prob_pi = -(dist.log_prob(a)).sum()
-        value_output = -v_s
-        entropy = dist.entropy().sum()
-        entropy_pi = -entropy_coeff * entropy * torch.sign(delta).item()
-
-        # Backprop
-        self.optimizer_value.zero_grad()
+        entropy_pi = -self.entropy_coeff * dist.entropy().sum() * torch.sign(delta_policy).item()
         self.optimizer_policy.zero_grad()
-        value_output.backward()
+        self.optimizer_critic.zero_grad()
+        if self.observer_exists: 
+            self.optimizer_observer.zero_grad()
+        
+
+        (-v_s).backward()
         (log_prob_pi + entropy_pi).backward()
+        info_policy = self.optimizer_policy.step(delta_policy.item(), reset=done)
+        info_critic = self.optimizer_critic.step(delta_critic.item(), reset=done)
 
-        # Optimizer steps (capture optional info from ObGD)
-        pol_info = self.optimizer_policy.step(delta.item(), reset=done)
-        val_info = self.optimizer_value.step(delta.item(), reset=done)
 
+        # observer update:
+        info_observer = {}
+        if self.observer_exists:
+            v_s_obs, v_prime_obs = self.v_observer(s), self.v_observer(s_prime)
+            (-v_s_obs).backward()
+            delta_obs = r + self.gamma_observer * v_prime_obs * done_mask_t - v_s_obs
+            info_observer = self.optimizer_observer.step(delta_obs.item(), reset=done)
+            # For logging:
+            info_observer = {**(info_observer or {}),
+                "td_error": float(delta_obs.item()),
+                "v(s)": float(v_s_obs.item()),
+            }
+
+
+        # Logging:
+        info_policy = {**(info_policy or {}),
+            "policy_log_prob": float((-log_prob_pi).item()),  # log π(a|s)
+            "std_mean": float(std.mean().item()),
+            "mu_norm": float(mu.norm().item()),
+            "reward": float(r.item()),
+        }
+        info_critic = {**(info_critic or {}),
+            "td_error": float(delta_critic.item()),
+            "v(s)": float(v_s.item()),
+        }
+        
         # Optional overshooting check
-        if overshooting_info:
+        if False: #if self.overshooting_info:
             v_s2 = self.v(s)
             v_prime2 = self.v(s_prime)
             td_target2 = r + self.gamma * v_prime2 * done_mask_t
@@ -120,145 +224,261 @@ class StreamAC(nn.Module):
             if torch.sign(delta_bar * delta).item() == -1:
                 print("Overshooting Detected!")
 
-        # Collect metrics
-        info = {
-            "train/td_error": float(delta.item()),
-            "train/value_v": float(v_s.item()),
-            "train/policy_entropy": float(entropy.item()),
-            "train/policy_log_prob": float((-log_prob_pi).item()),  # log π(a|s)
-            "train/std_mean": float(std.mean().item()),
-            "train/mu_norm": float(mu.norm().item()),
-            "train/reward": float(r.item()),
-        }
-        if val_info is not None:
-            for key in val_info:
-                info[f'optimizer_val/{key}'] = val_info[key]
-        if pol_info is not None:
-            for key in pol_info:
-                info[f'optimizer_pol/{key}'] = pol_info[key]
+        return  {'policy':info_policy, 'critic':info_critic, 'observer':info_observer}
 
-        return info
+def compute_prediction_MSE(list_ep_R, list_ep_v, gamma):
+    G = 0.0; ep_sse = 0.0; ep_abss = 0.0
+    for v, r in zip(reversed(list_ep_v), reversed(list_ep_R)):
+        G = r + gamma * G
+        err = G - v
+        ep_sse  += err * err
+        ep_abss += abs(err)
+    return {'ep_MSE_error':ep_sse,  'ep_abs_error':ep_abss}
 
-def main(env_name, seed, lr, gamma, lamda, total_steps, entropy_coeff, kappa_policy, kappa_value, debug, overshooting_info, render=False,
-         log_backend="tensorboard", log_dir="runs", project="rl", run_name=None):
+def compute_prediction_MSE_end_of_episode_W(list_ep_R, list_ep_S, observer_net, gamma):
+    list_ep_v = []
+    with torch.no_grad():
+        for s in list_ep_S:
+            list_ep_v.append(observer_net(torch.tensor(np.array(s), dtype=torch.float)).item())
+    return compute_prediction_MSE(list_ep_R, list_ep_v, gamma)
+
+
+def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observer_spec={'optimizer':'none'}, logging_spec={'backend':'none'}, debug=False, render=False):
     torch.manual_seed(seed); np.random.seed(seed)
+
+    render = bool(logging_spec.get('render', False))
     env = gym.make(env_name, render_mode='human') if render else gym.make(env_name)
     env = gym.wrappers.FlattenObservation(env)
     env = gym.wrappers.RecordEpisodeStatistics(env)
     env = gym.wrappers.ClipAction(env)
-    env = ScaleReward(env, gamma=gamma)
+
+    gamma_env = critic_spec.get('gamma', policy_spec.get('gamma'))
+    env = ScaleReward(env, gamma=gamma_env)
     env = NormalizeObservation(env)
     env = AddTimeInfo(env)
-    agent = StreamAC(n_obs=env.observation_space.shape[0], n_actions=env.action_space.shape[0], lr=lr, gamma=gamma, lamda=lamda, kappa_policy=kappa_policy, kappa_value=kappa_value)
-    if debug:
-        print("seed: {}".format(seed), "env: {}".format(env.spec.id))
 
-    # NEW: init logger (TB or WandB)
-    config = {
-        "env_name": env_name, "seed": seed, "lr": lr, "gamma": gamma, "lamda": lamda,
-        "total_steps": total_steps, "entropy_coeff": entropy_coeff,
-        "kappa_policy": kappa_policy, "kappa_value": kappa_value,
-    }
-    logger = get_logger(
-        backend=log_backend,
-        log_dir=log_dir,
-        project=project,
-        run_name=run_name or f"{env.spec.id}_lr_{lr}_lambda_{lamda}_seed{seed}",
-        config=config
+    agent = StreamAC(
+        n_obs=env.observation_space.shape[0],
+        n_actions=env.action_space.shape[0],
+        policy_spec=policy_spec,
+        critic_spec=critic_spec,
+        observer_spec=observer_spec,
     )
-    # Optional: for wandb, watch models' grads
-    logger.watch([agent.policy_net, agent.value_net], log="all")  # no-op on TB
 
-    returns, term_time_steps = [], []
+    # ---- Logging ----
+    config = {
+        "env_name": env_name, 
+        "seed": seed,
+        "policy": policy_spec,
+        "critic": critic_spec,
+        "observer": observer_spec,
+    }
+
+    run_name = logging_spec.get('run_name')
+    auto_name = f"{env.spec.id}"
+    final_run_name = auto_name if not run_name else f"{auto_name}__{run_name}"
+
+    logger = get_logger(
+        backend=logging_spec.get('backend', 'wandb'),
+        log_dir=logging_spec.get('dir', 'runs'),
+        project=logging_spec.get('project', 'StreamX_OptDesign'),
+        run_name=final_run_name,
+        config=config,
+    )
+    logger.watch([agent.policy_net, agent.critic_net], log="all")  # no-op for TB
+
+    if debug:
+        print(f"seed: {seed} env: {env.spec.id}")
+
+    # ---- Train ----
+    start_time = time.time()
+    max_time_in_seconds = sum(int(x) * 60 ** i for i, x in enumerate(reversed(max_time.split(":"))))
+
     s, _ = env.reset(seed=seed)
-
-    # Episode accumulators for ObGD stats
+    list_ep_R, list_ep_v, list_ep_S = [], {'critic':[], 'observer':[]}, []
     ep_steps = 0
-    ep_alpha_clipped_count = 0
     ep_min_inv_M_sum = 0.0
+    max_epoch_time = 0.0
+    epoch_start_time = time.time()
+    
 
-    for t in range(1, total_steps+1):
+    for t in range(1, int(total_steps) + 1):
         a = agent.sample_action(s)
         s_prime, r, terminated, truncated, info = env.step(a)
 
-        # Update and collect per-step metrics
-        step_info = agent.update_params(s, a, r, s_prime,  terminated or truncated, entropy_coeff, overshooting_info)
+        list_ep_R.append(r)
+        list_ep_S.append(s)
 
-        # Per-time-step logging (x-axis is the global time step)
-        logger.log(step_info, step=t)
-
-        # Accumulate episode-level ObGD stats if available
-        ep_steps += 1
-        if bool(step_info.get("policy_optimizer/alpha_clipped", False)):
-            ep_alpha_clipped_count += 1
-        if "policy_optimizer/min_inv_M" in step_info:
-            ep_min_inv_M_sum += float(step_info["obgd/min_inv_M"])
-
+        step_info = agent.update_params(s, a, r, s_prime, (terminated or truncated),)
         s = s_prime
 
+        for net in ['critic', 'observer']:
+            list_ep_v[net].append(step_info[net].get('v(s)',0.0))
+
+        if (t % 500_000) <= 2025:
+            expanded_step_info = {}
+            for net_type in step_info:
+                section = step_info.get(net_type) or {}
+                for metric, val in section.items():
+                    expanded_step_info[f'{net_type}/{metric}'] = val
+            logger.log(expanded_step_info, step=t)
+
+
+        ep_steps += 1
+        ep_min_inv_M_sum += float(step_info.get('policy', {}).get('min_inv_M', 0.0))
+
         if terminated or truncated:
+            if agent.observer_exists:
+                ep_pred_error = compute_prediction_MSE(list_ep_R, list_ep_v['observer'], agent.gamma_observer)
+                ep_pred_error_end_of_episode_W = compute_prediction_MSE_end_of_episode_W(list_ep_R, list_ep_S, agent.observer_net, agent.gamma_observer)
+            ep_pred_error_critic = compute_prediction_MSE(list_ep_R, list_ep_v['critic'], agent.gamma_critic)
+            
+
             ep_return = info["episode"]["r"]
             ep_len = info["episode"].get("l", ep_steps)
-
-            # Compute requested episode-level metrics
-            alpha_clip_pct = 100.0 * ep_alpha_clipped_count / max(ep_steps, 1)
             avg_min_inv_M = ep_min_inv_M_sum / max(ep_steps, 1) if ep_min_inv_M_sum > 0 else None
 
-            # Log episode summaries at the terminating time step
-            logger.log({
+            log_payload = {
                 "episode/return": float(ep_return),
                 "episode/length": float(ep_len),
-                "policy_optimizer/alpha_clipped_percent": float(alpha_clip_pct),
-                "policy_optimizer/avg_min_inv_M": float(avg_min_inv_M) if avg_min_inv_M is not None else None,
-            }, step=t)
+                "policy/avg_min_inv_M": float(avg_min_inv_M) if avg_min_inv_M is not None else None,
+                "critic_prediction/episode_MSE":  float(ep_pred_error_critic['ep_MSE_error']),
+                "critic_prediction/episode_abs":  float(ep_pred_error_critic['ep_abs_error']),
+                "critic_prediction/episode_RMSE": float(np.sqrt(ep_pred_error_critic['ep_MSE_error'])),
+            }
+            if agent.observer_exists:
+                log_payload.update({
+                    "observer_prediction/episode_MSE":  float(ep_pred_error['ep_MSE_error']),
+                    "observer_prediction/episode_abs":  float(ep_pred_error['ep_abs_error']),
+                    "observer_prediction/episode_RMSE": float(np.sqrt(ep_pred_error['ep_MSE_error'])),
+                    "observer_prediction/episode_MSE_end_of_episode_W":  float(ep_pred_error_end_of_episode_W['ep_MSE_error']),
+                    "observer_prediction/episode_abs_end_of_episode_W":  float(ep_pred_error_end_of_episode_W['ep_abs_error']),
+                    "observer_prediction/episode_RMSE_end_of_episode_W": float(np.sqrt(ep_pred_error_end_of_episode_W['ep_MSE_error'])),
+                })
+            logger.log(log_payload, step=t)
+
 
             if debug:
-                print(f"Episodic Return: {ep_return}, Time Step {t} | "
-                      f"alpha_clipped%={alpha_clip_pct:.2f}, avg_min_inv_M={avg_min_inv_M}")
+                print(f"Episodic Return: {ep_return}, Time Step {t}")
 
-            returns.append(ep_return)
-            term_time_steps.append(t)
+            # time guard
+            max_epoch_time = max(time.time() - epoch_start_time, max_epoch_time)
+            epoch_start_time = time.time()
+            if time.time() - start_time > max_time_in_seconds - 30 - 1.2 * max_epoch_time:
+                print("Terminating early due to time constraint...")
+                break
 
-            # Reset episode accumulators
+            # reset episode accumulators
             ep_steps = 0
-            ep_alpha_clipped_count = 0
             ep_min_inv_M_sum = 0.0
-
-            terminated, truncated = False, False
             s, _ = env.reset()
+            list_ep_R, list_ep_v, list_ep_S = [], {'critic':[], 'observer':[]}, []
+
+    print(f"total time = {time.gmtime(int(time.time() - start_time))}")
 
     env.close()
-    logger.finish()  # NEW
+    logger.finish()
 
-    save_dir = "data_stream_ac_{}_lr{}_gamma{}_lamda{}_entropy_coeff{}".format(env.spec.id, lr, gamma, lamda, entropy_coeff)
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
-    with open(os.path.join(save_dir, "seed_{}.pkl".format(seed)), "wb") as f:
-        pickle.dump((returns, term_time_steps, env_name), f)
+    if False:
+        save_dir = "data_stream_ac_{}_lr{}_gamma{}_lamda{}_entropy_coeff{}".format(env.spec.id, lr, gamma, lamda, entropy_coeff)
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+        with open(os.path.join(save_dir, "seed_{}.pkl".format(seed)), "wb") as f:
+            pickle.dump((returns, term_time_steps, env_name), f)
+
+
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Stream AC(λ)')
-    parser.add_argument('--env_name', type=str, default='HalfCheetah-v4')
+    parser.add_argument('--env_name', type=str, default='Ant-v5')  # HalfCheetah-v4
     parser.add_argument('--seed', type=int, default=0)
-    parser.add_argument('--lr', type=float, default=1.0)
-    parser.add_argument('--gamma', type=float, default=0.99)
-    parser.add_argument('--lamda', type=float, default=0.8)
     parser.add_argument('--total_steps', type=int, default=2_000_000)
-    parser.add_argument('--entropy_coeff', type=float, default=0.01)
-    parser.add_argument('--kappa_policy', type=float, default=3.0)
-    parser.add_argument('--kappa_value', type=float, default=2.0)
+    parser.add_argument('--max_time', type=str, default='1000:00:00')  # in HH:MM:SS
+
+    parser.add_argument('--policy_kappa', type=float, default=3.0)
+    parser.add_argument('--policy_optimizer', type=str, default='ObGD', choices=['ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'AdaptiveObGD'])
+    parser.add_argument('--policy_u_trace', type=float, default=0.99)  # for Obn
+    parser.add_argument('--policy_entryise_normalization', type=str, default='RMSProp')  # 'none' or 'RMSProp'
+    parser.add_argument('--policy_beta2', type=float, default=0.999)  # for Obn
+    parser.add_argument('--policy_gamma', type=float, default=0.99)
+    parser.add_argument('--policy_lamda', type=float, default=0.0)
+    parser.add_argument('--policy_lr', type=float, default=1.0)
+    parser.add_argument('--policy_entropy_coeff', type=float, default=0.01)  # was entropy_coeff
+
+    parser.add_argument('--critic_optimizer', type=str, default='ObGD', choices=['ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'AdaptiveObGD'])
+    parser.add_argument('--critic_kappa', type=float, default=2.0)
+    parser.add_argument('--critic_u_trace', type=float, default=0.99)  # for Obn
+    parser.add_argument('--critic_entryise_normalization', type=str, default='RMSProp')  # 'none' or 'RMSProp'
+    parser.add_argument('--critic_beta2', type=float, default=0.999)  # for Obn
+    parser.add_argument('--critic_gamma', type=float, default=0.99)
+    parser.add_argument('--critic_lamda', type=float, default=0.0)
+    parser.add_argument('--critic_lr', type=float, default=1.0)
+
+    parser.add_argument('--observer_kappa', type=float, default=2.0)
+    parser.add_argument('--observer_optimizer', type=str, default='none', choices=['none', 'ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'AdaptiveObGD'])
+    parser.add_argument('--observer_u_trace', type=float, default=0.99)  # for Obn
+    parser.add_argument('--observer_entryise_normalization', type=str, default='RMSProp')  # 'none' or 'RMSProp'
+    parser.add_argument('--observer_beta2', type=float, default=0.999)  # for Obn
+    parser.add_argument('--observer_gamma', type=float, default=0.99)
+    parser.add_argument('--observer_lamda', type=float, default=0.0)
+    parser.add_argument('--observer_lr', type=float, default=1.0)
+
+    parser.add_argument('--log_backend', type=str, default='none', choices=['none', 'tensorboard', 'wandb', 'wandb_offline'])
+    parser.add_argument('--log_dir', type=str, default='/home/asharif/StreamX_optimizer/WandB_offline', help='WandB offline log dir (if backend=wandb_offline)')
+    parser.add_argument('--project', type=str, default='test_stream_CC', help='WandB project (if backend=wandb)')
+    parser.add_argument('--run_name', type=str, default='', help='Run name for logger')  # __sqrt_coeff
+    parser.add_argument('--uID', type=str, default='', help='')  # not used
     parser.add_argument('--debug', action='store_true')
-    parser.add_argument('--overshooting_info', action='store_true')
     parser.add_argument('--render', action='store_true')
 
-    # NEW: logging choices/params
-    parser.add_argument('--log_backend', type=str, default='wandb', choices=['tensorboard', 'wandb', 'none'])
-    parser.add_argument('--log_dir', type=str, default='runs', help='TensorBoard log dir (if backend=tensorboard)')
-    parser.add_argument('--project', type=str, default='StreamX', help='WandB project (if backend=wandb)')
-    parser.add_argument('--run_name', type=str, default='', help='Run name for logger')
-
     args = parser.parse_args()
-    
-    main(args.env_name, args.seed, args.lr, args.gamma, args.lamda, args.total_steps, args.entropy_coeff,
-         args.kappa_policy, args.kappa_value, args.debug, args.overshooting_info, args.render,
-         log_backend=args.log_backend, log_dir=args.log_dir, project=f'{args.project}_{args.env_name}', run_name=f'{args.run_name}')
+
+    # ---- Spec dicts ----
+    policy_spec = {
+        'optimizer': args.policy_optimizer,
+        'kappa': args.policy_kappa,
+        'gamma': args.policy_gamma,
+        'lamda': args.policy_lamda,
+        'lr': args.policy_lr,
+        'entropy_coeff': args.policy_entropy_coeff}
+    if policy_spec['optimizer'] == 'Obn':
+        policy_spec.update({'u_trace': args.policy_u_trace,
+                            'entryise_normalization': args.policy_entryise_normalization,
+                            'beta2': args.policy_beta2})
+
+    critic_spec = {
+        'optimizer': args.critic_optimizer,
+        'kappa': args.critic_kappa,
+        'gamma': args.critic_gamma,
+        'lamda': args.critic_lamda,
+        'lr': args.critic_lr}
+    if critic_spec['optimizer'] == 'Obn':
+        critic_spec.update({'u_trace': args.critic_u_trace,
+                            'entryise_normalization': args.critic_entryise_normalization,
+                            'beta2': args.critic_beta2})
+
+    observer_spec = {'optimizer': args.observer_optimizer,}
+    if observer_spec['optimizer'] != 'none':
+        observer_spec.update({
+            'kappa': args.observer_kappa,
+            'gamma': args.observer_gamma,
+            'lamda': args.observer_lamda,
+            'lr': args.observer_lr})
+        observer_spec['kappa'] = args.observer_kappa
+    if observer_spec['optimizer'] == 'Obn':
+        observer_spec.update({'u_trace': args.observer_u_trace,
+                              'entryise_normalization': args.observer_entryise_normalization,
+                              'beta2': args.observer_beta2})
+
+    # ---- Logging dict ----
+    logging_spec = {
+        'backend': args.log_backend,
+        'dir': args.log_dir,
+        'project': f'{args.project}_{args.env_name}',
+        'run_name': args.run_name,
+        'uID': args.uID,
+    }
+
+    main(args.env_name, args.seed, args.total_steps, args.max_time, policy_spec=policy_spec, critic_spec=critic_spec, observer_spec=observer_spec, logging_spec=logging_spec, debug=args.debug, render=args.render)  
+

@@ -57,7 +57,6 @@ class ObGD_sq_plain(torch.optim.Optimizer):
         super(ObGD_sq_plain, self).__init__(params, defaults)
     
     def step(self, delta, reset=False):
-        lgging_info = {}
         z_sum = 0.0
         for group in self.param_groups:
             for p in group["params"]:
@@ -90,7 +89,6 @@ class ObGD_sq(torch.optim.Optimizer):
         super(ObGD_sq, self).__init__(params, defaults)
     
     def step(self, delta, reset=False):
-        lgging_info = {}
         z_sum = 0.0
         for group in self.param_groups:
             for p in group["params"]:
@@ -127,7 +125,6 @@ class ObGD(torch.optim.Optimizer):
         defaults = dict(lr=lr, gamma=gamma, lamda=lamda, kappa=kappa)
         super(ObGD, self).__init__(params, defaults)
     def step(self, delta, reset=False):
-        lgging_info = {}
         z_sum = 0.0
         for group in self.param_groups:
             for p in group["params"]:
