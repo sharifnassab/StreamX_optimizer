@@ -3,7 +3,7 @@ from _slurm_generator import generate_slurm
 
 RESOURCE_DEFAULTS = {
     "account":  "def-sutton",
-    "max_time": "01:30:00",
+    "max_time": "02:00:00",
     "cpus":     1,
     "mem":     '2G',
     "gpus":    '0',   #  v100:1,  0
@@ -56,7 +56,7 @@ if 1:
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_kappa":         list_policy_kappa,
-        "critic_optimizer":     ['ObGD', 'AdaptiveObGD', 'ObGD_sq', 'ObGD_sq_plain'],
+        "critic_optimizer":     ['ObGD'],# 'AdaptiveObGD', 'ObGD_sq', 'ObGD_sq_plain'],
         "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
         "seed":                 seeds,
     })
@@ -65,6 +65,7 @@ if 1:
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_kappa":         list_policy_kappa,
+        "critic_optimizer":     ['Obn'],
         "critic_kappa":         [1.5, 2.0, 3.0], #[1.0, 1.5, 2.0, 3.0],
         "critic_entryise_normalization": ['none','RMSProp'],
         "critic_beta2":         [0.999],
