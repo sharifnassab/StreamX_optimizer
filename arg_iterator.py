@@ -52,7 +52,7 @@ seeds = [i for i in range(30)]
 list_policy_kappa = [3.0, 2.0]
 
 
-if 1: 
+if 0: 
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_kappa":         list_policy_kappa,
@@ -65,8 +65,8 @@ if 1:
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_kappa":         list_policy_kappa,
-        "critic_optimizer":     ['Obn'],
-        "critic_kappa":         [1.5, 2.0, 3.0], #[1.0, 1.5, 2.0, 3.0],
+        "critic_optimizer":     ['ObnC'],
+        "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
         "critic_entryise_normalization": ['none','RMSProp'],
         "critic_beta2":         [0.999],
         "critic_u_trace":       [0.99],

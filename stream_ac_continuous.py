@@ -14,6 +14,7 @@ from optim import ObGD_sq_plain as ObGDsqPlain_Optimizer
 from optim import ObGD as ObGD_Optimizer
 from optim import AdaptiveObGD as AdaptiveObGD_Optimizer
 from optim import Obn as Obn_Optimizer
+from optim import ObnC as ObnC_Optimizer
 from time_wrapper import AddTimeInfo
 from normalization_wrappers import NormalizeObservation, ScaleReward
 from sparse_init import sparse_init
@@ -145,6 +146,11 @@ class StreamAC(nn.Module):
             return ObGDsqPlain_Optimizer(params, lr=lr, gamma=gamma, lamda=lamda, kappa=kappa)
         if opt_name == 'obn':
             return Obn_Optimizer(
+                params, lr=lr, gamma=gamma, lamda=lamda, kappa=kappa,
+                u_trace=u_trace, entryise_normalization=entryise_normalization, beta2=beta2
+            )
+        if opt_name == 'obnc':
+            return ObnC_Optimizer(
                 params, lr=lr, gamma=gamma, lamda=lamda, kappa=kappa,
                 u_trace=u_trace, entryise_normalization=entryise_normalization, beta2=beta2
             )
