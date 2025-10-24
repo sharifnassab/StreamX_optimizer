@@ -55,11 +55,22 @@ seeds = [i for i in range(30)]
 
 
 
-if 1: 
+if 0: 
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "observer_optimizer":     ['ObGD', 'ObGD_sq', 'ObGD_sq_plain'],# 'AdaptiveObGD', 'ObGD_sq', 'ObGD_sq_plain'],
         "observer_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
+        "seed":                 seeds,
+    })
+
+if 0: 
+    HYPER_SWEEPS.append({
+        "env_name":             environments,
+        "observer_optimizer":     ['Obn', 'ObnC'],
+        "observer_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
+        "observer_entryise_normalization": ['RMSProp'],
+        "observer_beta2":         [0.999],
+        "observer_u_trace":       [0.01, .999],
         "seed":                 seeds,
     })
 
@@ -68,9 +79,9 @@ if 1:
         "env_name":             environments,
         "observer_optimizer":     ['Obn', 'ObnC'],
         "observer_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
-        "observer_entryise_normalization": ['RMSProp'],
+        "observer_entryise_normalization": ['none'],
         "observer_beta2":         [0.999],
-        "observer_u_trace":       [0.01, .999],
+        "observer_u_trace":       [0.01],
         "seed":                 seeds,
     })
 
