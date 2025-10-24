@@ -15,6 +15,7 @@ from optim import ObGD as ObGD_Optimizer
 from optim import AdaptiveObGD as AdaptiveObGD_Optimizer
 from optim import Obn as Obn_Optimizer
 from optim import ObnC as ObnC_Optimizer
+from optim import ObnN as ObnN_Optimizer
 from time_wrapper import AddTimeInfo
 from normalization_wrappers import NormalizeObservation, ScaleReward
 from sparse_init import sparse_init
@@ -71,7 +72,7 @@ def spec_to_name(spec: dict) -> str:
                         'gamma':        '_gam',
                         'lamda':        'lam',
                         'kappa':        'k',
-                        'entryise_normalization': 'en',
+                        'entrywise_normalization': 'en',
                         'beta2':        'b2',
                         'u_trace':      'u',
                         'entropy_coeff':'ent',
@@ -131,9 +132,10 @@ class StreamAC(nn.Module):
         kappa  = float(spec.get('kappa'))
 
         # Only for Obn
-        u_trace = float(spec.get('u_trace', 0.99))
-        entryise_normalization = spec.get('entryise_normalization', 'none')
+        u_trace = float(spec.get('u_trace', 0.01))
+        entrywise_normalization = spec.get('entrywise_normalization', 'none')
         beta2  = float(spec.get('beta2', 0.999))
+        delta_trace = float(spec.get('delta_trace', 0.01))
 
 
         if opt_name == 'obgd':
@@ -147,13 +149,19 @@ class StreamAC(nn.Module):
         if opt_name == 'obn':
             return Obn_Optimizer(
                 params, lr=lr, gamma=gamma, lamda=lamda, kappa=kappa,
-                u_trace=u_trace, entryise_normalization=entryise_normalization, beta2=beta2
+                u_trace=u_trace, entrywise_normalization=entrywise_normalization, beta2=beta2
             )
         if opt_name == 'obnc':
             return ObnC_Optimizer(
                 params, lr=lr, gamma=gamma, lamda=lamda, kappa=kappa,
-                u_trace=u_trace, entryise_normalization=entryise_normalization, beta2=beta2
+                u_trace=u_trace, entrywise_normalization=entrywise_normalization, beta2=beta2
             )
+        if opt_name == 'obnn':
+            return ObnN_Optimizer(
+                params, lr=lr, gamma=gamma, lamda=lamda, kappa=kappa, delta_trace=delta_trace,
+                u_trace=u_trace, entrywise_normalization=entrywise_normalization, beta2=beta2
+            )
+
         raise ValueError(f"Unknown optimizer '{spec.get('optimizer')}' for role '{role}'.")
 
 
@@ -308,7 +316,9 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
         run_name=run_name+f'__seed{seed}',
         config=config,
     )
-    logger.watch([agent.policy_net, agent.critic_net], log="all")  # no-op for TB
+    logging_level = logging_spec.get('level')
+    if logging_level in ['heavy']:
+        logger.watch([agent.policy_net, agent.critic_net], log="all")  # no-op for TB
 
     if debug:
         print(f"seed: {seed} env: {env.spec.id}")
@@ -321,6 +331,7 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
     list_ep_R, list_ep_v, list_ep_S = [], {'critic':[], 'observer':[]}, []
     ep_steps = 0
     ep_min_inv_M_sum = 0.0
+    ep_policy_std = 0.0
     max_epoch_time = 0.0
     epoch_start_time = time.time()
     
@@ -338,7 +349,7 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
         for net in ['critic', 'observer']:
             list_ep_v[net].append(step_info[net].get('v(s)',0.0))
 
-        if (t % 500_000) <= 2025:
+        if (t % 500_000) <= 2025 and  logging_level in ['heavy']:
             expanded_step_info = {}
             for net_type in step_info:
                 section = step_info.get(net_type) or {}
@@ -349,6 +360,7 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
 
         ep_steps += 1
         ep_min_inv_M_sum += float(step_info.get('policy', {}).get('min_inv_M', 0.0))
+        ep_policy_std += float(step_info.get('policy', {}).get('std_mean', 0.0))
 
         if terminated or truncated:
             if agent.observer_exists:
@@ -360,21 +372,23 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
             ep_return = info["episode"]["r"]
             ep_len = info["episode"].get("l", ep_steps)
             avg_min_inv_M = ep_min_inv_M_sum / max(ep_steps, 1) if ep_min_inv_M_sum > 0 else None
+            avg_policy_std = ep_policy_std / max(ep_steps, 1) if ep_policy_std > 0 else None
 
             log_payload = {
                 "_episode/return": float(ep_return),
                 "_episode/length": float(ep_len),
                 "policy/avg_min_inv_M": float(avg_min_inv_M) if avg_min_inv_M is not None else None,
+                "policy/avg_policy_std": float(avg_policy_std) if avg_policy_std is not None else None,
                 #"critic_prediction/episode_MSE":  float(ep_pred_error_critic['ep_MSE_error']),
                 #"critic_prediction/episode_abs":  float(ep_pred_error_critic['ep_abs_error']),
                 "critic_prediction/episode_RMSE": float(np.sqrt(ep_pred_error_critic['ep_MSE_error'])),
             }
             if agent.observer_exists:
                 log_payload.update({
-                    "observer_prediction/episode_MSE":  float(ep_pred_error['ep_MSE_error']),
+                    #"observer_prediction/episode_MSE":  float(ep_pred_error['ep_MSE_error']),
                     "observer_prediction/episode_abs":  float(ep_pred_error['ep_abs_error']),
                     "observer_prediction/episode_RMSE": float(np.sqrt(ep_pred_error['ep_MSE_error'])),
-                    "observer_prediction/episode_MSE_end_of_episode_W":  float(ep_pred_error_end_of_episode_W['ep_MSE_error']),
+                    #"observer_prediction/episode_MSE_end_of_episode_W":  float(ep_pred_error_end_of_episode_W['ep_MSE_error']),
                     "observer_prediction/episode_abs_end_of_episode_W":  float(ep_pred_error_end_of_episode_W['ep_abs_error']),
                     "observer_prediction/episode_RMSE_end_of_episode_W": float(np.sqrt(ep_pred_error_end_of_episode_W['ep_MSE_error'])),
                 })
@@ -394,6 +408,7 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
             # reset episode accumulators
             ep_steps = 0
             ep_min_inv_M_sum = 0.0
+            ep_policy_std = 0.0
             s, _ = env.reset()
             list_ep_R, list_ep_v, list_ep_S = [], {'critic':[], 'observer':[]}, []
 
@@ -419,36 +434,41 @@ if __name__ == '__main__':
     parser.add_argument('--total_steps', type=int, default=2_000_000)
     parser.add_argument('--max_time', type=str, default='1000:00:00')  # in HH:MM:SS
 
-    parser.add_argument('--policy_optimizer', type=str, default='ObGD', choices=['ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'AdaptiveObGD'])
+    parser.add_argument('--policy_optimizer', type=str, default='ObGD', choices=['ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD'])
     parser.add_argument('--policy_kappa', type=float, default=3.0)
     parser.add_argument('--policy_gamma', type=float, default=0.99)
     parser.add_argument('--policy_lamda', type=float, default=0.0)
     parser.add_argument('--policy_lr', type=float, default=1.0)
     parser.add_argument('--policy_entropy_coeff', type=float, default=0.01)  # was entropy_coeff
-    parser.add_argument('--policy_u_trace', type=float, default=0.99)  # for Obn
-    parser.add_argument('--policy_entryise_normalization', type=str, default='RMSProp')  # 'none' or 'RMSProp'
+    parser.add_argument('--policy_u_trace', type=float, default=0.01)  # for Obn
+    parser.add_argument('--policy_entrywise_normalization', type=str, default='RMSProp')  # 'none' or 'RMSProp'
     parser.add_argument('--policy_beta2', type=float, default=0.999)  # for Obn
+    parser.add_argument('--policy_delta_trace', type=float, default=0.01)  # for ObnN
     
-    parser.add_argument('--critic_optimizer', type=str, default='ObGD', choices=['ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'AdaptiveObGD'])
+    parser.add_argument('--critic_optimizer', type=str, default='ObnC', choices=['ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD'])
     parser.add_argument('--critic_kappa', type=float, default=2.0)
     parser.add_argument('--critic_gamma', type=float, default=0.99)
     parser.add_argument('--critic_lamda', type=float, default=0.0)
     parser.add_argument('--critic_lr', type=float, default=1.0)
-    parser.add_argument('--critic_u_trace', type=float, default=0.99)  # for Obn
-    parser.add_argument('--critic_entryise_normalization', type=str, default='RMSProp')  # 'none' or 'RMSProp'
+    parser.add_argument('--critic_u_trace', type=float, default=0.01)  # for Obn
+    parser.add_argument('--critic_entrywise_normalization', type=str, default='RMSProp')  # 'none' or 'RMSProp'
     parser.add_argument('--critic_beta2', type=float, default=0.999)  # for Obn
+    parser.add_argument('--critic_delta_trace', type=float, default=0.01)  # for ObnN
     
-    parser.add_argument('--observer_optimizer', type=str, default='none', choices=['none', 'ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'AdaptiveObGD'])
+
+    parser.add_argument('--observer_optimizer', type=str, default='none', choices=['none', 'ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD'])
     parser.add_argument('--observer_kappa', type=float, default=2.0)
     parser.add_argument('--observer_gamma', type=float, default=0.99)
     parser.add_argument('--observer_lamda', type=float, default=0.0)
     parser.add_argument('--observer_lr', type=float, default=1.0)
-    parser.add_argument('--observer_u_trace', type=float, default=0.99)  # for Obn
-    parser.add_argument('--observer_entryise_normalization', type=str, default='RMSProp')  # 'none' or 'RMSProp'
+    parser.add_argument('--observer_u_trace', type=float, default=0.01)  # for Obn
+    parser.add_argument('--observer_entrywise_normalization', type=str, default='RMSProp')  # 'none' or 'RMSProp'
     parser.add_argument('--observer_beta2', type=float, default=0.999)  # for Obn
+    parser.add_argument('--observer_delta_trace', type=float, default=0.01)  # for ObnN
     
     parser.add_argument('--log_backend', type=str, default='none', choices=['none', 'tensorboard', 'wandb', 'wandb_offline'])
     parser.add_argument('--log_dir', type=str, default='/home/asharif/StreamX_optimizer/WandB_offline', help='WandB offline log dir (if backend=wandb_offline)')
+    parser.add_argument('--logging_level', type=str, default='light', help='how much detail to show on wandb', choices=['light', 'heavy'])
     parser.add_argument('--project', type=str, default='test_stream_CC', help='WandB project (if backend=wandb)')
     parser.add_argument('--run_name', type=str, default='', help='Run name for logger')  # __sqrt_coeff
     parser.add_argument('--uID', type=str, default='', help='')  # not used
@@ -465,10 +485,12 @@ if __name__ == '__main__':
         'lamda': args.policy_lamda,
         'lr': args.policy_lr,
         'entropy_coeff': args.policy_entropy_coeff}
-    if policy_spec['optimizer'] == 'Obn':
+    if policy_spec['optimizer'] in ['Obn','ObnC','ObnN']:
         policy_spec.update({'u_trace': args.policy_u_trace,
-                            'entryise_normalization': args.policy_entryise_normalization,
+                            'entrywise_normalization': args.policy_entrywise_normalization,
                             'beta2': args.policy_beta2})
+        if policy_spec['optimizer'] in ['ObnN']:
+            policy_spec.update({'delta_trace': args.policy_delta_trace})
 
     critic_spec = {
         'optimizer': args.critic_optimizer,
@@ -476,12 +498,14 @@ if __name__ == '__main__':
         'gamma': args.critic_gamma,
         'lamda': args.critic_lamda,
         'lr': args.critic_lr}
-    if critic_spec['optimizer'] == 'Obn':
+    if critic_spec['optimizer'] in ['Obn','ObnC','ObnN']:
         critic_spec.update({'u_trace': args.critic_u_trace,
-                            'entryise_normalization': args.critic_entryise_normalization,
+                            'entrywise_normalization': args.critic_entrywise_normalization,
                             'beta2': args.critic_beta2})
+        if critic_spec['optimizer'] in ['ObnN']:
+            critic_spec.update({'delta_trace': args.critic_delta_trace})
 
-    observer_spec = {'optimizer': args.observer_optimizer,}
+    observer_spec = {'optimizer': args.observer_optimizer}
     if observer_spec['optimizer'] != 'none':
         observer_spec.update({
             'kappa': args.observer_kappa,
@@ -489,15 +513,18 @@ if __name__ == '__main__':
             'lamda': args.observer_lamda,
             'lr': args.observer_lr})
         observer_spec['kappa'] = args.observer_kappa
-    if observer_spec['optimizer'] == 'Obn':
+    if observer_spec['optimizer'] in ['Obn','ObnC','ObnN']:
         observer_spec.update({'u_trace': args.observer_u_trace,
-                              'entryise_normalization': args.observer_entryise_normalization,
+                              'entrywise_normalization': args.observer_entrywise_normalization,
                               'beta2': args.observer_beta2})
+        if observer_spec['optimizer'] in ['ObnN']:
+            observer_spec.update({'delta_trace': args.observer_delta_trace})
 
     # ---- Logging dict ----
     logging_spec = {
         'backend': args.log_backend,
         'dir': f'{args.log_dir}_{args.env_name}',
+        'level': args.logging_level,
         'project': f'{args.project}_{args.env_name}',
         'run_name': args.run_name,
         'uID': args.uID,

@@ -34,6 +34,7 @@ COMMON_ENV = {
     #
     "log_backend":      "wandb_offline",
     "log_dir":          "/home/asharif/scratch/StreamX_optimizer/WandB_offline", #"/home/asharif/StreamX_optimizer/WandB_offline",
+    "logging_level":    "light",      # "light" , "heavy"
     "project":          "StreamX_OptDesign",
 }
 
@@ -65,11 +66,11 @@ if 1:
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_kappa":         list_policy_kappa,
-        "critic_optimizer":     ['ObnC'],
+        "critic_optimizer":     ['Obn','ObnC'],
         "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
-        "critic_entryise_normalization": ['none','RMSProp'],
+        "critic_entrywise_normalization": ['none','RMSProp'],
         "critic_beta2":         [0.999],
-        "critic_u_trace":       [0.99],
+        "critic_u_trace":       [0.01],
         "seed":                 seeds,
     })
 
