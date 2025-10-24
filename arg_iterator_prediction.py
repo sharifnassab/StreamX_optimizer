@@ -35,6 +35,7 @@ COMMON_ENV = {
     #
     "log_backend":      "wandb_offline",
     "log_dir":          "/home/asharif/scratch/StreamX_optimizer/WandB_offline", #"/home/asharif/StreamX_optimizer/WandB_offline",
+    "logging_level":    "light",      # "light" , "heavy"
     "project":          "StreamX_OptDesign_Observe",
 }
 
@@ -69,7 +70,7 @@ if 1:
         "observer_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
         "observer_entryise_normalization": ['RMSProp'],
         "observer_beta2":         [0.999],
-        "observer_u_trace":       [0.99],
+        "observer_u_trace":       [0.01, .999],
         "seed":                 seeds,
     })
 
