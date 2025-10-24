@@ -35,7 +35,7 @@ COMMON_ENV = {
     #
     "log_backend":      "wandb_offline",
     "log_dir":          "/home/asharif/scratch/StreamX_optimizer/WandB_offline", #"/home/asharif/StreamX_optimizer/WandB_offline",
-    "logging_level":    "light",      # "light" , "heavy"
+    "logging_level":    "heavy",      # "light" , "heavy"
     "project":          "StreamX_OptDesign_Observe",
 }
 
