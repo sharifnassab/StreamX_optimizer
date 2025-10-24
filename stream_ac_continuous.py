@@ -77,6 +77,8 @@ def spec_to_name(spec: dict) -> str:
                         'u_trace':      'u',
                         'entropy_coeff':'ent',
                         'lr':           'lr',
+                        'weight_decay': 'wd',
+                        'delta_trace':  'delTr'
                         }
     list_params = []
     for key in short_hand_mapping:
@@ -444,6 +446,7 @@ if __name__ == '__main__':
     parser.add_argument('--policy_entrywise_normalization', type=str, default='RMSProp')  # 'none' or 'RMSProp'
     parser.add_argument('--policy_beta2', type=float, default=0.999)  # for Obn
     parser.add_argument('--policy_delta_trace', type=float, default=0.01)  # for ObnN
+    parser.add_argument('--policy_weight_decay', type=float, default=0.0) 
     
     parser.add_argument('--critic_optimizer', type=str, default='ObnC', choices=['ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD'])
     parser.add_argument('--critic_kappa', type=float, default=2.0)
@@ -454,6 +457,7 @@ if __name__ == '__main__':
     parser.add_argument('--critic_entrywise_normalization', type=str, default='RMSProp')  # 'none' or 'RMSProp'
     parser.add_argument('--critic_beta2', type=float, default=0.999)  # for Obn
     parser.add_argument('--critic_delta_trace', type=float, default=0.01)  # for ObnN
+    parser.add_argument('--critic_weight_decay', type=float, default=0.0) 
     
 
     parser.add_argument('--observer_optimizer', type=str, default='none', choices=['none', 'ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD'])
@@ -465,6 +469,7 @@ if __name__ == '__main__':
     parser.add_argument('--observer_entrywise_normalization', type=str, default='RMSProp')  # 'none' or 'RMSProp'
     parser.add_argument('--observer_beta2', type=float, default=0.999)  # for Obn
     parser.add_argument('--observer_delta_trace', type=float, default=0.01)  # for ObnN
+    parser.add_argument('--observer_weight_decay', type=float, default=0.0) 
     
     parser.add_argument('--log_backend', type=str, default='none', choices=['none', 'tensorboard', 'wandb', 'wandb_offline'])
     parser.add_argument('--log_dir', type=str, default='/home/asharif/StreamX_optimizer/WandB_offline', help='WandB offline log dir (if backend=wandb_offline)')
@@ -483,6 +488,7 @@ if __name__ == '__main__':
         'kappa': args.policy_kappa,
         'gamma': args.policy_gamma,
         'lamda': args.policy_lamda,
+        'weight_decay': args.policy_weight_decay,
         'lr': args.policy_lr,
         'entropy_coeff': args.policy_entropy_coeff}
     if policy_spec['optimizer'] in ['Obn','ObnC','ObnN']:
@@ -497,6 +503,7 @@ if __name__ == '__main__':
         'kappa': args.critic_kappa,
         'gamma': args.critic_gamma,
         'lamda': args.critic_lamda,
+        'weight_decay': args.critic_weight_decay,
         'lr': args.critic_lr}
     if critic_spec['optimizer'] in ['Obn','ObnC','ObnN']:
         critic_spec.update({'u_trace': args.critic_u_trace,
@@ -511,6 +518,7 @@ if __name__ == '__main__':
             'kappa': args.observer_kappa,
             'gamma': args.observer_gamma,
             'lamda': args.observer_lamda,
+            'weight_decay': args.observer_weight_decay,
             'lr': args.observer_lr})
         observer_spec['kappa'] = args.observer_kappa
     if observer_spec['optimizer'] in ['Obn','ObnC','ObnN']:
