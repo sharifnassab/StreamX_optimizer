@@ -55,7 +55,7 @@ environments = ['Ant-v5', 'HalfCheetah-v5', 'Hopper-v5', 'Walker2d-v5', 'Humanoi
 seeds = [i for i in range(30)]
 
 
-if 1: 
+if 0: 
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['ObGD'],
@@ -64,7 +64,7 @@ if 1:
         "seed":                 seeds,
     })
 
-if 1: 
+if 0: 
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['ObnN'],
@@ -77,6 +77,18 @@ if 1:
         "seed":                 seeds,
     })
 
+if 1: 
+    HYPER_SWEEPS.append({
+        "env_name":             environments,
+        "policy_optimizer":     ['ObnC'],
+        "policy_kappa":         [3,2],
+        "policy_entrywise_normalization": ['RMSProp'],
+        "policy_beta2":         [0.999],
+        "policy_u_trace":       [0.01],
+        "policy_delta_trace":   [0.01],
+        "critic_optimizer":     ['ObGD_sq', 'ObnC'],
+        "seed":                 seeds,
+    })
 
 
 
