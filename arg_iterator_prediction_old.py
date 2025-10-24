@@ -3,9 +3,9 @@ from _slurm_generator import generate_slurm
 
 RESOURCE_DEFAULTS = {
     "account":  "def-sutton",
-    "max_time": "02:50:00",
+    "max_time": "01:00:00",
     "cpus":     1,
-    "mem":     '2G',
+    "mem":     '1G',
     "gpus":    '0',   #  v100:1,  0
     "constraint": "granite"    # this is a CPU type on Nibi
 }
@@ -14,28 +14,23 @@ RESOURCE_OVERRIDES = {
     # ("BP", "ResNet18"): {"time": "08:00:00", "gpus": 2, "mem": "32G"},
 }
 
-PYTHON_ENTRYPOINT = "stream_ac_continuous.py"
+PYTHON_ENTRYPOINT = "stream_ac_continuous_OptDesign_prediction.py"
 
 COMMON_ENV = {
-    #"env_name":         "Ant-v5",
+    "env_name":         "Ant-v5",
     "total_steps":      2_000_000,
-    #
-    "policy_optimizer": 'ObGD',
-    "policy_kappa":     3.0,
-    "policy_gamma":     0.99,
-    "policy_lamda":     0.0,
-    "policy_lr":        1.0,
-    "policy_entropy_coeff": 0.01,
-    #
-    "critic_optimizer": 'ObGD_sq',
-    "critic_kappa":     2.0,
-    "critic_gamma":     0.99,
-    "critic_lamda":     0.0,
-    "critic_lr":        1.0,
-    #
+    "seed":             0,
+    "gamma":            0.99,
+    "lamda":            0.0,
+    "kappa_policy":     3.0,
+    "kappa_value":      2.0,
+    "observer_type":    "Obn",
+    "u_trace_value":    0.99,
+    "entryise_normalization_value": "RMSProp",
+    "beta2_value":      0.999,
     "log_backend":      "wandb_offline",
-    "log_dir":          "/home/asharif/scratch/StreamX_optimizer/WandB_offline", #"/home/asharif/StreamX_optimizer/WandB_offline",
-    "project":          "StreamX_OptDesign_Observe",
+    "log_dir":          "/home/asharif/StreamX_optimizer/WandB_offline",
+    "project":          "test_stream_CC",
 }
 
 
@@ -48,30 +43,23 @@ run_description = 'test0'
 
 HYPER_SWEEPS = []
 
-environments = ['Ant-v5', 'HalfCheetah-v5', 'Hopper-v5', 'Walker2d-v5', 'Humanoid-v5']
-seeds = [i for i in range(30)]
+if 1:
+    HYPER_SWEEPS.append({"kappa_value":      [2.0],})
 
-
-
-
-if 1: 
+if 0:
     HYPER_SWEEPS.append({
-        "env_name":             environments,
-        "observer_optimizer":     ['ObGD', 'ObGD_sq', 'ObGD_sq_plain'],# 'AdaptiveObGD', 'ObGD_sq', 'ObGD_sq_plain'],
-        "observer_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
-        "seed":                 seeds,
+        "beta_reg":             [1],
+        "beta_averaging_type":  ['weighted'],
+        "max_time":             ["00:15:00"],       # time or "default"
+    })
+if 0:
+    HYPER_SWEEPS.append({
+        "beta_reg":             [1,10],
+        "beta_averaging_type":  ['uniform'],
+        "stepsize_blocks":      ["[2,2]"],
+        "max_time":             ["default"],       # time or "default"
     })
 
-if 1: 
-    HYPER_SWEEPS.append({
-        "env_name":             environments,
-        "observer_optimizer":     ['Obn', 'ObnC'],
-        "observer_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
-        "observer_entryise_normalization": ['RMSProp'],
-        "observer_beta2":         [0.999],
-        "observer_u_trace":       [0.99],
-        "seed":                 seeds,
-    })
 
 
 
@@ -85,7 +73,7 @@ if 1:
 # ------------------------------------------------------------------
 # --------- 2. Normally nothing below needs editing ----------------
 # ------------------------------------------------------------------
-REMOTE_RESULTS_ROOT = "/home/asharif/scratch/StreamX_optimizer/outputs"
+REMOTE_RESULTS_ROOT = "/home/asharif/StreamX_optimizer/results/outputs"
 VENV_ACTIVATE     = "~/venv_streamx/bin/activate"
 
 """
