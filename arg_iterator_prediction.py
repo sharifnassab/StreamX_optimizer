@@ -55,7 +55,7 @@ seeds = [i for i in range(30)]
 
 
 
-if 0: 
+if 1: 
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "observer_optimizer":     ['ObGD', 'ObGD_sq', 'ObGD_sq_plain'],# 'AdaptiveObGD', 'ObGD_sq', 'ObGD_sq_plain'],
@@ -63,7 +63,7 @@ if 0:
         "seed":                 seeds,
     })
 
-if 0: 
+if 1: 
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "observer_optimizer":     ['Obn', 'ObnC'],
@@ -74,7 +74,7 @@ if 0:
         "seed":                 seeds,
     })
 
-if 1: 
+if 0: 
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "observer_optimizer":     ['Obn', 'ObnC'],
