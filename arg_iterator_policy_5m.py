@@ -21,7 +21,6 @@ COMMON_ENV = {
     "total_steps":      5_000_000,
     #
     "policy_gamma":     0.99,
-    "policy_lamda":     0.0,
     "policy_lr":        1.0,
     #
     "critic_kappa":     2.0,
@@ -29,7 +28,6 @@ COMMON_ENV = {
     "critic_beta2":     0.999,
     "critic_u_trace":   0.01,
     "critic_gamma":     0.99,
-    "critic_lamda":     0.0,
     "critic_lr":        1.0,
     #
     "observer_optimizer": 'none',
@@ -55,32 +53,49 @@ environments = ['Ant-v5', 'HalfCheetah-v5', 'Hopper-v5', 'Walker2d-v5', 'Humanoi
 seeds = [i for i in range(30)]
 
 
-if 1: 
+if 0: 
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['ObGD'],
-        "policy_kappa":         [3,2,1],
+        "policy_kappa":         [3,2,1], # 3 is optimum consistently
         "policy_entropy_coeff": [0.01],
+        "policy_lamda":         [0.0],
+        "critic_lamda":         [0.0],
         "critic_optimizer":     ['ObGD', 'ObnC'],   # ['ObGD', 'AdaptiveObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC'],
         "seed":                 seeds,
     })
 
-if 1: 
+if 0: 
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['ObnN'],
-        "policy_kappa":         [10,20,30],
+        "policy_kappa":         [10,20,30], # 20 was best most of the time
         "policy_entrywise_normalization": ['RMSProp'],
         "policy_beta2":         [0.999],
         "policy_u_trace":       [0.01],
         "policy_delta_trace":   [0.01],
         "policy_entropy_coeff": [0.01, 0.03],
-        
+        "policy_lamda":         [0.0],
+        "critic_lamda":         [0.0],
         "critic_optimizer":     ['ObnC'],
         "seed":                 seeds,
     })
 
-if 0: 
+
+if 1: 
+    HYPER_SWEEPS.append({
+        "env_name":             environments,
+        "policy_optimizer":     ['ObGD'],
+        "policy_kappa":         [3], # 3 is optimum consistently
+        "policy_entropy_coeff": [0.01],
+        "policy_lamda":         [0.8],
+        "critic_lamda":         [0.8],
+        "critic_optimizer":     ['ObGD'],   # ['ObGD', 'AdaptiveObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC'],
+        "seed":                 seeds,
+    })
+
+
+if 0: # was not good
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['ObnC'],
