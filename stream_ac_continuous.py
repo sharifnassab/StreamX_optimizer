@@ -551,7 +551,6 @@ if __name__ == '__main__':
             'lamda': args.observer_lamda,
             'weight_decay': args.observer_weight_decay,
             'lr': args.observer_lr})
-        observer_spec['kappa'] = args.observer_kappa
     if observer_spec['optimizer'] in ['Obn','ObnC','ObnN']:
         observer_spec.update({'u_trace': args.observer_u_trace,
                               'entrywise_normalization': args.observer_entrywise_normalization,
