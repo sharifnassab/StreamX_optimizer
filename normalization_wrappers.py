@@ -74,6 +74,7 @@ class ScaleReward(gym.core.Wrapper, gym.utils.RecordConstructorArgs):
 
     def step(self, action):
         obs, rews, terminateds, truncateds, infos = self.env.step(action)
+        infos['reward_immediate'] = rews
         if not self.is_vector_env:
             rews = np.array([rews])
         term = terminateds or truncateds

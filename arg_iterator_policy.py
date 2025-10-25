@@ -3,7 +3,7 @@ from _slurm_generator import generate_slurm
 
 RESOURCE_DEFAULTS = {
     "account":  "def-sutton",
-    "max_time": "02:00:00",
+    "max_time": "06:00:00",
     "cpus":     1,
     "mem":     '2G',
     "gpus":    '0',   #  v100:1,  0
@@ -18,12 +18,11 @@ PYTHON_ENTRYPOINT = "stream_ac_continuous.py"
 
 COMMON_ENV = {
     #"env_name":         "Ant-v5",
-    "total_steps":      2_000_000,
+    "total_steps":      5_000_000,
     #
     "policy_gamma":     0.99,
     "policy_lamda":     0.0,
     "policy_lr":        1.0,
-    "policy_entropy_coeff": 0.01,
     #
     "critic_kappa":     2.0,
     "critic_entrywise_normalization": 'RMSProp',
@@ -35,10 +34,11 @@ COMMON_ENV = {
     #
     "observer_optimizer": 'none',
     #
-    "log_backend":      "wandb_offline",
-    "log_dir":          "/home/asharif/scratch/StreamX_optimizer/WandB_offline", #"/home/asharif/StreamX_optimizer/WandB_offline",
-    "logging_level":    "light",      # "light" , "heavy"
-    "project":          "StreamX_OptDesign_policy",
+    "log_backend":          "wandb_offline",
+    "log_dir":              "/home/asharif/scratch/StreamX_optimizer/WandB_offline", #"/home/asharif/StreamX_optimizer/WandB_offline",
+    "log_dir_for_pickle":   "/home/asharif/scratch/StreamX_optimizer/Pickles",
+    "logging_level":        "light",      # "light" , "heavy"
+    "project":              "StreamX_OptDesign_policy_5m",
 }
 
 
@@ -55,16 +55,17 @@ environments = ['Ant-v5', 'HalfCheetah-v5', 'Hopper-v5', 'Walker2d-v5', 'Humanoi
 seeds = [i for i in range(30)]
 
 
-if 0: 
+if 1: 
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['ObGD'],
-        "policy_kappa":         [3,2],
-        "critic_optimizer":     ['ObGD_sq', 'Obn', 'ObnC'],   # ['ObGD', 'AdaptiveObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC'],
+        "policy_kappa":         [3,2,1],
+        "policy_entropy_coeff": [0.01],
+        "critic_optimizer":     ['ObGD', 'ObnC'],   # ['ObGD', 'AdaptiveObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC'],
         "seed":                 seeds,
     })
 
-if 0: 
+if 1: 
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['ObnN'],
@@ -73,20 +74,22 @@ if 0:
         "policy_beta2":         [0.999],
         "policy_u_trace":       [0.01],
         "policy_delta_trace":   [0.01],
-        "critic_optimizer":     ['ObGD_sq', 'Obn', 'ObnC'],
+        "policy_entropy_coeff": [0.01, 0.03],
+        
+        "critic_optimizer":     ['ObnC'],
         "seed":                 seeds,
     })
 
-if 1: 
+if 0: 
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['ObnC'],
-        "policy_kappa":         [3,2],
+        "policy_kappa":         [3,2,1],
         "policy_entrywise_normalization": ['RMSProp'],
         "policy_beta2":         [0.999],
         "policy_u_trace":       [0.01],
         "policy_delta_trace":   [0.01],
-        "critic_optimizer":     ['ObGD_sq', 'ObnC'],
+        "critic_optimizer":     ['ObnC'],
         "seed":                 seeds,
     })
 

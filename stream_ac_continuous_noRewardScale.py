@@ -67,14 +67,6 @@ class Critic(nn.Module):
         x = F.leaky_relu(x)
         return self.linear_layer(x)
     
-
-def compute_weight_norm(model):
-    total = 0.0
-    for p in model.parameters():
-        if p.requires_grad:  # only count learnable params
-            total += torch.sum(p ** 2)
-    return torch.sqrt(total)
-
 def spec_to_name(spec: dict) -> str:
     short_hand_mapping={'optimizer':    '',
                         'gamma':        '_gam',
@@ -93,9 +85,6 @@ def spec_to_name(spec: dict) -> str:
         if key in spec:
             list_params.append(f"{short_hand_mapping[key]}_{spec[key]}")
     return '_'.join(list_params) if list_params else ''
-
-
-
 
 class StreamAC(nn.Module):
     def __init__(
@@ -347,13 +336,20 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
     ep_min_inv_M_sum = 0.0
     ep_policy_std = 0.0
     max_epoch_time = 0.0
-    episode_number = 0
     epoch_start_time = time.time()
     
+    sum_r = 0
 
     for t in range(1, int(total_steps) + 1):
         a = agent.sample_action(s)
         s_prime, r, terminated, truncated, info = env.step(a)
+
+        sum_r+=info['reward_immediate']
+        if 'episode' in info:
+            print(sum_r)
+            print(info['episode']['r'].item())
+            sum_r = 0
+            print('\n')
 
         list_ep_R.append(r)
         list_ep_S.append(s)
@@ -370,11 +366,6 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
                 section = step_info.get(net_type) or {}
                 for metric, val in section.items():
                     expanded_step_info[f'{net_type}/{metric}'] = val
-            expanded_step_info.update({
-                                    'rewards/original':info['reward_immediate'], 
-                                    'rewards/scaled':r,
-                                    'rewards/ratio': r/info['reward_immediate'],
-                                  })
             logger.log(expanded_step_info, step=t)
 
 
@@ -397,20 +388,12 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
             log_payload = {
                 "_episode/return": float(ep_return),
                 "_episode/length": float(ep_len),
-                #"policy/avg_min_inv_M": float(avg_min_inv_M) if avg_min_inv_M is not None else None,
+                "policy/avg_min_inv_M": float(avg_min_inv_M) if avg_min_inv_M is not None else None,
                 "policy/avg_policy_std": float(avg_policy_std) if avg_policy_std is not None else None,
                 #"critic_prediction/episode_MSE":  float(ep_pred_error_critic['ep_MSE_error']),
                 #"critic_prediction/episode_abs":  float(ep_pred_error_critic['ep_abs_error']),
                 "critic_prediction/episode_RMSE": float(np.sqrt(ep_pred_error_critic['ep_MSE_error'])),
             }
-            if episode_number%40==0:
-                log_payload.update({
-                    "network/policy_w_norm": compute_weight_norm(agent.policy_net),
-                    "network/critic_w_norm": compute_weight_norm(agent.critic_net),
-                })
-                if agent.observer_exists:
-                    log_payload.update({"network/observer_w_norm": compute_weight_norm(agent.observer_net)}) 
-                    
             if agent.observer_exists:
                 log_payload.update({
                     #"observer_prediction/episode_MSE":  float(ep_pred_error['ep_MSE_error']),
@@ -435,22 +418,21 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
             
             returns.append(ep_return)
             term_time_steps.append(t)
-
+            
             # reset episode accumulators
             ep_steps = 0
             ep_min_inv_M_sum = 0.0
             ep_policy_std = 0.0
             s, _ = env.reset()
             list_ep_R, list_ep_v, list_ep_S = [], {'critic':[], 'observer':[]}, []
-            episode_number+=1
 
     print(f"total time = {time.gmtime(int(time.time() - start_time))}")
 
     env.close()
     logger.finish()
 
-    if logging_spec['dir_pickle'] != 'none':
-        save_dir = os.path.join(logging_spec['dir_pickle'],  run_name)
+    if False:
+        save_dir = "data_stream_ac_{}_lr{}_gamma{}_lamda{}_entropy_coeff{}".format(env.spec.id, lr, gamma, lamda, entropy_coeff)
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
         with open(os.path.join(save_dir, "seed_{}.pkl".format(seed)), "wb") as f:
@@ -466,8 +448,8 @@ if __name__ == '__main__':
     parser.add_argument('--total_steps', type=int, default=2_000_000)
     parser.add_argument('--max_time', type=str, default='1000:00:00')  # in HH:MM:SS
 
-    parser.add_argument('--policy_optimizer', type=str, default='ObGD', choices=['ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD'])
-    parser.add_argument('--policy_kappa', type=float, default=3.0)
+    parser.add_argument('--policy_optimizer', type=str, default='ObnN', choices=['ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD'])
+    parser.add_argument('--policy_kappa', type=float, default=20.0)
     parser.add_argument('--policy_gamma', type=float, default=0.99)
     parser.add_argument('--policy_lamda', type=float, default=0.0)
     parser.add_argument('--policy_lr', type=float, default=1.0)
@@ -475,11 +457,11 @@ if __name__ == '__main__':
     parser.add_argument('--policy_u_trace', type=float, default=0.01)  # for Obn
     parser.add_argument('--policy_entrywise_normalization', type=str, default='RMSProp')  # 'none' or 'RMSProp'
     parser.add_argument('--policy_beta2', type=float, default=0.999)  # for Obn
-    parser.add_argument('--policy_delta_trace', type=float, default=0.01)  # for ObnN
+    parser.add_argument('--policy_delta_trace', type=float, default=0.001)  # for ObnN
     parser.add_argument('--policy_weight_decay', type=float, default=0.0) 
     
-    parser.add_argument('--critic_optimizer', type=str, default='ObnC', choices=['ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD'])
-    parser.add_argument('--critic_kappa', type=float, default=2.0)
+    parser.add_argument('--critic_optimizer', type=str, default='Obn', choices=['ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD'])
+    parser.add_argument('--critic_kappa', type=float, default=3.0)
     parser.add_argument('--critic_gamma', type=float, default=0.99)
     parser.add_argument('--critic_lamda', type=float, default=0.0)
     parser.add_argument('--critic_lr', type=float, default=1.0)
@@ -503,7 +485,6 @@ if __name__ == '__main__':
     
     parser.add_argument('--log_backend', type=str, default='none', choices=['none', 'tensorboard', 'wandb', 'wandb_offline'])
     parser.add_argument('--log_dir', type=str, default='/home/asharif/StreamX_optimizer/WandB_offline', help='WandB offline log dir (if backend=wandb_offline)')
-    parser.add_argument('--log_dir_for_pickle', type=str, default='none', help='/home/asharif/StreamX_optimizer/pickle')
     parser.add_argument('--logging_level', type=str, default='light', help='how much detail to show on wandb', choices=['light', 'heavy'])
     parser.add_argument('--project', type=str, default='test_stream_CC', help='WandB project (if backend=wandb)')
     parser.add_argument('--run_name', type=str, default='', help='Run name for logger')  # __sqrt_coeff
@@ -563,7 +544,6 @@ if __name__ == '__main__':
     logging_spec = {
         'backend': args.log_backend,
         'dir': f'{args.log_dir}_{args.env_name}',
-        'dir_pickle': args.log_dir_for_pickle,
         'level': args.logging_level,
         'project': f'{args.project}_{args.env_name}',
         'run_name': args.run_name,
