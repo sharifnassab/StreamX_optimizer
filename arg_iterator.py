@@ -104,10 +104,22 @@ if 1:
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "critic_optimizer":     ['ObtC'],
-        "critic_kappa":         [1.5, 2.0, 3.0], #[1.0, 1.5, 2.0, 3.0],
+        "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
         "critic_entrywise_normalization": ['RMSProp'],
         "critic_beta2":         [0.999],
         "critic_sig_power":     [1],
+        "critic_in_trace_sample_scaling":['False'],
+        "seed":                 seeds,
+    })
+
+if 1: 
+    HYPER_SWEEPS.append({
+        "env_name":             environments,
+        "critic_optimizer":     ['ObtC'],
+        "critic_kappa":         [1.5, 3.0], #[1.0, 1.5, 2.0, 3.0],
+        "critic_entrywise_normalization": ['RMSProp'],
+        "critic_beta2":         [0.999],
+        "critic_sig_power":     [2],
         "critic_in_trace_sample_scaling":['False'],
         "seed":                 seeds,
     })
