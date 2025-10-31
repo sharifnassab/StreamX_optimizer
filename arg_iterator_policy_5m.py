@@ -3,7 +3,7 @@ from _slurm_generator import generate_slurm
 
 RESOURCE_DEFAULTS = {
     "account":  "def-sutton",
-    "max_time": "06:00:00",
+    "max_time": "08:00:00",
     "cpus":     1,
     "mem":     '2G',
     "gpus":    '0',   #  v100:1,  0
@@ -82,7 +82,7 @@ if 0:
     })
 
 
-if 1: 
+if 0: 
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['ObGD'],
@@ -111,8 +111,79 @@ if 0: # was not good
 
 
 
+if 1: 
+    HYPER_SWEEPS.append({
+        "env_name":             environments,
+        "policy_optimizer":     ['ObGD'],
+        "policy_kappa":         [3], # 3 is optimum consistently
+        "policy_entropy_coeff": [0.01],
+        "policy_lamda":         [0.8],
+        "critic_optimizer":     ['ObtC'],
+        "critic_lamda":         [0.8],
+        "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
+        "critic_entrywise_normalization": ['RMSProp'],
+        "critic_beta2":         [0.999],
+        "critic_sig_power":     [2],
+        "critic_in_trace_sample_scaling":['False', 'True'],
+        "seed":                 seeds,
+    })
 
+if 1: 
+    HYPER_SWEEPS.append({
+        "env_name":             environments,
+        "policy_optimizer":     ['ObGD'],
+        "policy_kappa":         [3], # 3 is optimum consistently
+        "policy_entropy_coeff": [0.01],
+        "policy_lamda":         [0.8],
+        "critic_optimizer":     ['ObtC'],
+        "critic_lamda":         [0.8],
+        "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
+        "critic_entrywise_normalization": ['RMSProp'],
+        "critic_beta2":         [0.999],
+        "critic_sig_power":     [1],
+        "critic_in_trace_sample_scaling":['False'],
+        "seed":                 seeds,
+    })
 
+if 1: 
+    HYPER_SWEEPS.append({
+        "env_name":             environments,
+        "policy_optimizer":     ['ObGD'],
+        "policy_kappa":         [3], # 3 is optimum consistently
+        "policy_entropy_coeff": [0.01],
+        "policy_lamda":         [0.8],
+        "critic_optimizer":     ['ObtC'],
+        "critic_lamda":         [0.8],
+        "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
+        "critic_entrywise_normalization": ['RMSProp'],
+        "critic_beta2":         [0.999],
+        "critic_sig_power":     [2],
+        "critic_in_trace_sample_scaling":['False'],
+        "critic_weight_decay":  [0.00001, 0.0001],
+        "seed":                 seeds,
+    })
+
+if 1: 
+    HYPER_SWEEPS.append({
+        "env_name":             environments,
+        "policy_optimizer":     ['ObtN'],
+        "policy_lamda":         [0.8],
+        "policy_kappa":         [20,30], # 20 was best most of the time
+        "policy_entrywise_normalization": ['RMSProp'],
+        "policy_beta2":         [0.999],
+        "policy_delta_trace":   [0.01],
+        "policy_sig_power":     [2],
+        "policy_in_trace_sample_scaling":['False'],
+        "policy_entropy_coeff": [0.01],
+        "critic_optimizer":     ['ObtC'],
+        "critic_lamda":         [0.8],
+        "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
+        "critic_entrywise_normalization": ['RMSProp'],
+        "critic_beta2":         [0.999],
+        "critic_sig_power":     [2],
+        "critic_in_trace_sample_scaling":['False'],
+        "seed":                 seeds,
+    })
 
 
 

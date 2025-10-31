@@ -3,7 +3,7 @@ from _slurm_generator import generate_slurm
 
 RESOURCE_DEFAULTS = {
     "account":  "def-sutton",
-    "max_time": "02:50:00",
+    "max_time": "04:00:00",
     "cpus":     1,
     "mem":     '2G',
     "gpus":    '0',   #  v100:1,  0
@@ -55,37 +55,52 @@ seeds = [i for i in range(30)]
 
 
 
+if 1: 
+    HYPER_SWEEPS.append({
+        "env_name":             environments,
+        "observer_optimizer":     ['ObGD'],#, 'ObGD_sq', 'ObGD_sq_plain'],# 'AdaptiveObGD', 'ObGD_sq', 'ObGD_sq_plain'],
+        "observer_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
+        "observer_lamda":         [0.8], 
+        "seed":                 seeds,
+    })
+
 if 0: 
     HYPER_SWEEPS.append({
         "env_name":             environments,
-        "observer_optimizer":     ['ObGD', 'ObGD_sq', 'ObGD_sq_plain'],# 'AdaptiveObGD', 'ObGD_sq', 'ObGD_sq_plain'],
+        "observer_optimizer":     ['Obn', 'ObnC'],
         "observer_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
+        "observer_entrywise_normalization": ['RMSProp', 'none'],
+        "observer_beta2":         [0.999],
+        "observer_u_trace":       [0.01, .999],
+        "seed":                 seeds,
+    })
+
+
+if 1: 
+    HYPER_SWEEPS.append({
+        "env_name":             environments,
+        "observer_optimizer":     ['ObtC'],
+        "observer_lamda":         [0.8], 
+        "observer_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
+        "observer_entrywise_normalization": ['RMSProp'],
+        "observer_beta2":         [0.999],
+        "observer_sig_power":     [2],
+        "observer_in_trace_sample_scaling":['False', 'True'],
         "seed":                 seeds,
     })
 
 if 1: 
     HYPER_SWEEPS.append({
         "env_name":             environments,
-        "observer_optimizer":     ['Obn', 'ObnC'],
+        "observer_optimizer":     ['ObtC'],
+        "observer_lamda":         [0.8], 
         "observer_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
         "observer_entrywise_normalization": ['RMSProp'],
         "observer_beta2":         [0.999],
-        "observer_u_trace":       [0.01, .999],
+        "observer_sig_power":     [1],
+        "observer_in_trace_sample_scaling":['False'],
         "seed":                 seeds,
     })
-
-if 0: 
-    HYPER_SWEEPS.append({
-        "env_name":             environments,
-        "observer_optimizer":     ['Obn', 'ObnC'],
-        "observer_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
-        "observer_entrywise_normalization": ['none'],
-        "observer_beta2":         [0.999],
-        "observer_u_trace":       [0.01],
-        "seed":                 seeds,
-    })
-
-
 
 
 

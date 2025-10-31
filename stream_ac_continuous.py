@@ -16,6 +16,8 @@ from optim import AdaptiveObGD as AdaptiveObGD_Optimizer
 from optim import Obn as Obn_Optimizer
 from optim import ObnC as ObnC_Optimizer
 from optim import ObnN as ObnN_Optimizer
+from optim import ObtC as ObtC_Optimizer
+from optim import ObtN as ObtN_Optimizer
 from time_wrapper import AddTimeInfo
 from normalization_wrappers import NormalizeObservation, ScaleReward
 from sparse_init import sparse_init
@@ -86,7 +88,9 @@ def spec_to_name(spec: dict) -> str:
                         'entropy_coeff':'ent',
                         'lr':           'lr',
                         'weight_decay': 'wd',
-                        'delta_trace':  'delTr'
+                        'delta_trace':  'delTr',
+                        'sig_power':    'sigP',
+                        'in_trace_sample_scaling': 'itss',
                         }
     list_params = []
     for key in short_hand_mapping:
@@ -143,12 +147,15 @@ class StreamAC(nn.Module):
         gamma  = float(spec.get('gamma'))
         lamda  = float(spec.get('lamda'))
         kappa  = float(spec.get('kappa'))
+        weight_decay = float(spec.get('weight_decay', 0.0))
 
-        # Only for Obn
+        # Only for Obn / Obt
         u_trace = float(spec.get('u_trace', 0.01))
         entrywise_normalization = spec.get('entrywise_normalization', 'none')
         beta2  = float(spec.get('beta2', 0.999))
         delta_trace = float(spec.get('delta_trace', 0.01))
+        sig_power = float(spec.get('sig_power', 2))
+        in_trace_sample_scaling = spec.get('delta_trace', False)
 
 
         if opt_name == 'obgd':
@@ -173,6 +180,16 @@ class StreamAC(nn.Module):
             return ObnN_Optimizer(
                 params, lr=lr, gamma=gamma, lamda=lamda, kappa=kappa, delta_trace=delta_trace,
                 u_trace=u_trace, entrywise_normalization=entrywise_normalization, beta2=beta2
+            )
+        if opt_name == 'obtc':
+            return ObtC_Optimizer(
+                params, gamma=gamma, lamda=lamda, kappa=kappa,  weight_decay=weight_decay, sig_power=sig_power,
+                entrywise_normalization=entrywise_normalization, beta2=beta2, in_trace_sample_scaling=in_trace_sample_scaling
+            )
+        if opt_name == 'obtn':
+            return ObtN_Optimizer(
+                params, gamma=gamma, lamda=lamda, kappa=kappa,  weight_decay=weight_decay, sig_power=sig_power, delta_trace=delta_trace,
+                entrywise_normalization=entrywise_normalization, beta2=beta2, in_trace_sample_scaling=in_trace_sample_scaling
             )
 
         raise ValueError(f"Unknown optimizer '{spec.get('optimizer')}' for role '{role}'.")
@@ -309,8 +326,8 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
     )
 
     # ---- Logging ----
-    run_name = (f'{env.spec.id}_____Policy_{spec_to_name(policy_spec)}_____Critic_{spec_to_name(critic_spec)}' +
-                (f'_____Observer_{spec_to_name(observer_spec)}' if agent.observer_exists else '') + 
+    run_name = (f'{env.spec.id}____-Policy_{spec_to_name(policy_spec)}____-Critic_{spec_to_name(critic_spec)}' +
+                (f'____-Observer_{spec_to_name(observer_spec)}' if agent.observer_exists else '') + 
                 (f"____{logging_spec.get('run_name', '')}" if (logging_spec.get('run_name', '')!='') else ''))
     config = {
         "env_name": env_name, 
@@ -460,13 +477,14 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
 
 
 if __name__ == '__main__':
+    optimizer_choices = ['none', 'ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD', 'ObtC', 'ObtN']
     parser = argparse.ArgumentParser(description='Stream AC(λ)')
     parser.add_argument('--env_name', type=str, default='Ant-v5')  # HalfCheetah-v4
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--total_steps', type=int, default=2_000_000)
     parser.add_argument('--max_time', type=str, default='1000:00:00')  # in HH:MM:SS
 
-    parser.add_argument('--policy_optimizer', type=str, default='ObGD', choices=['ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD'])
+    parser.add_argument('--policy_optimizer', type=str, default='ObGD', choices=optimizer_choices)
     parser.add_argument('--policy_kappa', type=float, default=3.0)
     parser.add_argument('--policy_gamma', type=float, default=0.99)
     parser.add_argument('--policy_lamda', type=float, default=0.0)
@@ -477,8 +495,10 @@ if __name__ == '__main__':
     parser.add_argument('--policy_beta2', type=float, default=0.999)  # for Obn
     parser.add_argument('--policy_delta_trace', type=float, default=0.01)  # for ObnN
     parser.add_argument('--policy_weight_decay', type=float, default=0.0) 
+    parser.add_argument('--policy_in_trace_sample_scaling', type=str, default='True', choices=['True', 'False'])  # for Obt
+    parser.add_argument('--policy_sig_power', type=float, default=2) # for Obt
     
-    parser.add_argument('--critic_optimizer', type=str, default='ObnC', choices=['ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD'])
+    parser.add_argument('--critic_optimizer', type=str, default='ObnC', choices=optimizer_choices)
     parser.add_argument('--critic_kappa', type=float, default=2.0)
     parser.add_argument('--critic_gamma', type=float, default=0.99)
     parser.add_argument('--critic_lamda', type=float, default=0.0)
@@ -488,9 +508,10 @@ if __name__ == '__main__':
     parser.add_argument('--critic_beta2', type=float, default=0.999)  # for Obn
     parser.add_argument('--critic_delta_trace', type=float, default=0.01)  # for ObnN
     parser.add_argument('--critic_weight_decay', type=float, default=0.0) 
+    parser.add_argument('--critic_in_trace_sample_scaling', type=str, default='True', choices=['True', 'False']) # for Obt
+    parser.add_argument('--critic_sig_power', type=float, default=2) # for Obt
     
-
-    parser.add_argument('--observer_optimizer', type=str, default='none', choices=['none', 'ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD'])
+    parser.add_argument('--observer_optimizer', type=str, default='none', choices=optimizer_choices)
     parser.add_argument('--observer_kappa', type=float, default=2.0)
     parser.add_argument('--observer_gamma', type=float, default=0.99)
     parser.add_argument('--observer_lamda', type=float, default=0.0)
@@ -500,6 +521,8 @@ if __name__ == '__main__':
     parser.add_argument('--observer_beta2', type=float, default=0.999)  # for Obn
     parser.add_argument('--observer_delta_trace', type=float, default=0.01)  # for ObnN
     parser.add_argument('--observer_weight_decay', type=float, default=0.0) 
+    parser.add_argument('--observer_in_trace_sample_scaling', type=str, default='True', choices=['True', 'False']) # for Obt
+    parser.add_argument('--observer_sig_power', type=float, default=2) # for Obt
     
     parser.add_argument('--log_backend', type=str, default='none', choices=['none', 'tensorboard', 'wandb', 'wandb_offline'])
     parser.add_argument('--log_dir', type=str, default='/home/asharif/StreamX_optimizer/WandB_offline', help='WandB offline log dir (if backend=wandb_offline)')
@@ -514,49 +537,32 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # ---- Spec dicts ----
-    policy_spec = {
-        'optimizer': args.policy_optimizer,
-        'kappa': args.policy_kappa,
-        'gamma': args.policy_gamma,
-        'lamda': args.policy_lamda,
-        'weight_decay': args.policy_weight_decay,
-        'lr': args.policy_lr,
-        'entropy_coeff': args.policy_entropy_coeff}
-    if policy_spec['optimizer'] in ['Obn','ObnC','ObnN']:
-        policy_spec.update({'u_trace': args.policy_u_trace,
-                            'entrywise_normalization': args.policy_entrywise_normalization,
-                            'beta2': args.policy_beta2})
-        if policy_spec['optimizer'] in ['ObnN']:
-            policy_spec.update({'delta_trace': args.policy_delta_trace})
+    shared_params = ['optimizer', 'kappa', 'gamma', 'lamda', 'weight_decay']
+    required_optimizer_params = {
+        'none':         [],  # for observer
+        'ObGD':         shared_params + ['lr'],
+        'ObGD_sq':      shared_params + ['lr'],
+        'ObGD_sq_plain':shared_params + ['lr'],
+        'AdaptiveObGD': shared_params + ['lr'],
+        'Obn':          shared_params + ['lr', 'entrywise_normalization', 'beta2', 'u_trace'],
+        'ObnC':         shared_params + ['lr', 'entrywise_normalization', 'beta2', 'u_trace'],
+        'ObnN':         shared_params + ['lr', 'entrywise_normalization', 'beta2', 'u_trace', 'delta_trace'],
+        'ObtC':         shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling'],
+        'ObtN':         shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'delta_trace'],
+    }
 
-    critic_spec = {
-        'optimizer': args.critic_optimizer,
-        'kappa': args.critic_kappa,
-        'gamma': args.critic_gamma,
-        'lamda': args.critic_lamda,
-        'weight_decay': args.critic_weight_decay,
-        'lr': args.critic_lr}
-    if critic_spec['optimizer'] in ['Obn','ObnC','ObnN']:
-        critic_spec.update({'u_trace': args.critic_u_trace,
-                            'entrywise_normalization': args.critic_entrywise_normalization,
-                            'beta2': args.critic_beta2})
-        if critic_spec['optimizer'] in ['ObnN']:
-            critic_spec.update({'delta_trace': args.critic_delta_trace})
+    def build_spec(kind, args, required_optimizer_params) -> dict:
+        opt = getattr(args, f'{kind}_optimizer')
+        required_params = required_optimizer_params[opt]
+        spec = {'optimizer': opt}
+        for key in required_params:
+            spec[key] = getattr(args, f'{kind}_{key}')
+        return spec
 
-    observer_spec = {'optimizer': args.observer_optimizer}
-    if observer_spec['optimizer'] != 'none':
-        observer_spec.update({
-            'kappa': args.observer_kappa,
-            'gamma': args.observer_gamma,
-            'lamda': args.observer_lamda,
-            'weight_decay': args.observer_weight_decay,
-            'lr': args.observer_lr})
-    if observer_spec['optimizer'] in ['Obn','ObnC','ObnN']:
-        observer_spec.update({'u_trace': args.observer_u_trace,
-                              'entrywise_normalization': args.observer_entrywise_normalization,
-                              'beta2': args.observer_beta2})
-        if observer_spec['optimizer'] in ['ObnN']:
-            observer_spec.update({'delta_trace': args.observer_delta_trace})
+    policy_spec   = build_spec(kind='policy',   args=args, required_optimizer_params=required_optimizer_params)
+    policy_spec.update({'entropy_coeff': args.policy_entropy_coeff})
+    critic_spec   = build_spec(kind='critic',   args=args, required_optimizer_params=required_optimizer_params)
+    observer_spec = build_spec(kind='observer', args=args, required_optimizer_params=required_optimizer_params)
 
     # ---- Logging dict ----
     logging_spec = {

@@ -3,7 +3,7 @@ from _slurm_generator import generate_slurm
 
 RESOURCE_DEFAULTS = {
     "account":  "def-sutton",
-    "max_time": "02:00:00",
+    "max_time": "02:59:00",
     "cpus":     1,
     "mem":     '2G',
     "gpus":    '0',   #  v100:1,  0
@@ -22,12 +22,12 @@ COMMON_ENV = {
     #
     "policy_optimizer": 'ObGD',
     "policy_gamma":     0.99,
-    "policy_lamda":     0.0,
+    "policy_lamda":     0.8,
     "policy_lr":        1.0,
     "policy_entropy_coeff": 0.01,
     #
     "critic_gamma":     0.99,
-    "critic_lamda":     0.0,
+    "critic_lamda":     0.8,
     "critic_lr":        1.0,
     #
     "observer_optimizer": 'none',
@@ -50,7 +50,7 @@ HYPER_SWEEPS = []
 
 environments = ['Ant-v5', 'HalfCheetah-v5', 'Hopper-v5', 'Walker2d-v5', 'Humanoid-v5']
 seeds = [i for i in range(30)]
-list_policy_kappa = [3.0, 2.0]
+list_policy_kappa = [3.0]
 
 
 if 0: 
@@ -62,7 +62,7 @@ if 0:
         "seed":                 seeds,
     })
 
-if 1: 
+if 0: 
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_kappa":         list_policy_kappa,
@@ -74,8 +74,43 @@ if 1:
         "seed":                 seeds,
     })
 
+if 0: 
+    HYPER_SWEEPS.append({
+        "env_name":             environments,
+        "policy_kappa":         list_policy_kappa,
+        "critic_optimizer":     ['Obnt'],
+        "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
+        "critic_entrywise_normalization": ['none','RMSProp'],
+        "critic_beta2":         [0.999],
+        "critic_u_trace":       [0.01],
+        "seed":                 seeds,
+    })
 
 
+
+if 1: 
+    HYPER_SWEEPS.append({
+        "env_name":             environments,
+        "critic_optimizer":     ['ObtC'],
+        "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
+        "critic_entrywise_normalization": ['RMSProp'],
+        "critic_beta2":         [0.999],
+        "critic_sig_power":     [2],
+        "critic_in_trace_sample_scaling":['False', 'True'],
+        "seed":                 seeds,
+    })
+
+if 1: 
+    HYPER_SWEEPS.append({
+        "env_name":             environments,
+        "critic_optimizer":     ['ObtC'],
+        "critic_kappa":         [1.5, 2.0, 3.0], #[1.0, 1.5, 2.0, 3.0],
+        "critic_entrywise_normalization": ['RMSProp'],
+        "critic_beta2":         [0.999],
+        "critic_sig_power":     [1],
+        "critic_in_trace_sample_scaling":['False'],
+        "seed":                 seeds,
+    })
 
 
 
