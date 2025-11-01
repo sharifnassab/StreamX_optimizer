@@ -338,6 +338,7 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
         "run_name": run_name,
     }
     print(f"Run Name: {run_name}")
+    print(f"seed:{seed}")
 
     logger = get_logger(
         backend=logging_spec.get('backend', 'wandb'),

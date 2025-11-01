@@ -53,7 +53,7 @@ def main(data_dir, title,  int_space, total_steps, label_and_color_map):
             continue
         all_episodic_returns, all_termination_time_steps = load_pickle(os.path.join(data_dir,run_dir))
         steps, avg_ret, stderr_ret = avg_return_curve(all_termination_time_steps, all_episodic_returns, int_space, total_steps)
-        plt.fill_between(steps, avg_ret - stderr_ret, avg_ret + stderr_ret, color=f"tab:{color}", alpha=0.4)
+        plt.fill_between(steps, avg_ret - stderr_ret, avg_ret + stderr_ret, color=f"tab:{color if color!='black' else 'gray'}", alpha=0.4)
         plt.plot(steps, avg_ret, linewidth=2.0, color=color, label=label)
 
     plt.legend()
@@ -68,13 +68,17 @@ if __name__ == '__main__':
 
     label_and_color_map = {
         'Policy__ObGD__gam_0.99_lam_0.0_k_3.0_ent_0.01_lr_1.0_wd_0.0_____Critic__ObGD__gam_0.99_lam_0.0_k_2.0_lr_1.0_wd_0.0':
-        {'plot':'yes', 'label':'ObGD - ObGD  (lambda=0)', 'color':'grey'},
-        'Policy__ObGD__gam_0.99_lam_0.8_k_3.0_ent_0.01_lr_1.0_wd_0.0_____Critic__ObGD__gam_0.99_lam_0.8_k_2.0_lr_1.0_wd_0.0':
-        {'plot':'yes', 'label':'ObGD - ObGD  (lambda=0.8)', 'color':'blue'},
+        {'plot':'no', 'label':r'ObGD - ObGD  ($\lambda=0$)', 'color':'grey'},
         'Policy__ObGD__gam_0.99_lam_0.0_k_3.0_ent_0.01_lr_1.0_wd_0.0_____Critic__ObnC__gam_0.99_lam_0.0_k_2.0_en_RMSProp_b2_0.999_u_0.01_lr_1.0_wd_0.0':
-        {'plot':'yes', 'label':'ObGD - ObnC  (lambda=0)', 'color':'orange'},
+        {'plot':'no', 'label':r'ObGD - ObnC  ($\lambda=0$)', 'color':'orange'},
         'Policy__ObnN__gam_0.99_lam_0.0_k_20.0_en_RMSProp_b2_0.999_u_0.01_ent_0.01_lr_1.0_wd_0.0_delTr_0.01_____Critic__ObnC__gam_0.99_lam_0.0_k_2.0_en_RMSProp_b2_0.999_u_0.01_lr_1.0_wd_0.0':
-        {'plot':'yes', 'label':'ObnN - ObnC  (lambda=0)', 'color':'red'},
+        {'plot':'no', 'label':r'ObnN - ObnC  ($\lambda=0$)', 'color':'red'},
+        'Policy__ObGD__gam_0.99_lam_0.8_k_3.0_ent_0.01_lr_1.0_wd_0.0_____Critic__ObGD__gam_0.99_lam_0.8_k_2.0_lr_1.0_wd_0.0':
+        {'plot':'yes', 'label':r'ObGD - ObGD  ($\lambda=0.8$)', 'color':'blue'},
+        'Policy__ObGD__gam_0.99_lam_0.8_k_3.0_ent_0.01_lr_1.0_wd_0.0____-Critic__ObtC__gam_0.99_lam_0.8_k_2.0_en_RMSProp_b2_0.999_wd_0.0_sigP_2.0_itss_False':
+        {'plot':'yes', 'label':r'ObGD - ObtC  ($\lambda=0.8$)', 'color':'black'},
+        'Policy__ObtN__gam_0.99_lam_0.8_k_20.0_en_RMSProp_b2_0.999_ent_0.01_wd_0.0_delTr_0.01_sigP_2.0_itss_False____-Critic__ObtC__gam_0.99_lam_0.8_k_2.0_en_RMSProp_b2_0.999_wd_0.0_sigP_2.0_itss_False':
+        {'plot':'yes', 'label':r'ObtN - ObtC  ($\lambda=0.8$)', 'color':'green'},
     }
 
     parser = argparse.ArgumentParser()
