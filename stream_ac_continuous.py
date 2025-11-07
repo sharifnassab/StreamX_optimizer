@@ -18,6 +18,8 @@ from optim import ObnC as ObnC_Optimizer
 from optim import ObnN as ObnN_Optimizer
 from optim import ObtC as ObtC_Optimizer
 from optim import ObtN as ObtN_Optimizer
+from optim import Obt as Obt_Optimizer
+from optim import Obtnnz as Obtnnz_Optimizer
 from time_wrapper import AddTimeInfo
 from normalization_wrappers import NormalizeObservation, ScaleReward
 from sparse_init import sparse_init
@@ -32,41 +34,43 @@ def initialize_weights(m):
         m.bias.data.fill_(0.0)
 
 class Actor(nn.Module):
-    def __init__(self, n_obs=11, n_actions=3, hidden_size=128):
+    def __init__(self, n_obs=11, n_actions=3, hidden_depth=2, hidden_width=128):
         super(Actor, self).__init__()
-        self.fc_layer   = nn.Linear(n_obs, hidden_size)
-        self.hidden_layer = nn.Linear(hidden_size, hidden_size)
-        self.linear_mu = nn.Linear(hidden_size, n_actions)
-        self.linear_std = nn.Linear(hidden_size, n_actions)
+        self.fc_layer   = nn.Linear(n_obs, hidden_width)
+        self.hidden_layers = [nn.Linear(hidden_width, hidden_width) for _ in range(hidden_depth-1)]
+        self.linear_mu = nn.Linear(hidden_width, n_actions)
+        self.linear_std = nn.Linear(hidden_width, n_actions)
         self.apply(initialize_weights)
 
     def forward(self, x):
         x = self.fc_layer(x)
         x = F.layer_norm(x, x.size())
         x = F.leaky_relu(x)
-        x = self.hidden_layer(x)
-        x = F.layer_norm(x, x.size())
-        x = F.leaky_relu(x)
+        for hidden_layer in self.hidden_layers:
+            x = hidden_layer(x)
+            x = F.layer_norm(x, x.size())
+            x = F.leaky_relu(x)
         mu = self.linear_mu(x)
         pre_std = self.linear_std(x)
         std = F.softplus(pre_std)
         return mu, std
 
 class Critic(nn.Module):
-    def __init__(self, n_obs=11, hidden_size=128):
+    def __init__(self, n_obs=11, hidden_depth=2, hidden_width=128):
         super(Critic, self).__init__()
-        self.fc_layer   = nn.Linear(n_obs, hidden_size)
-        self.hidden_layer  = nn.Linear(hidden_size, hidden_size)
-        self.linear_layer  = nn.Linear(hidden_size, 1)
+        self.fc_layer   = nn.Linear(n_obs, hidden_width)
+        self.hidden_layers = [nn.Linear(hidden_width, hidden_width) for _ in range(hidden_depth-1)]
+        self.linear_layer  = nn.Linear(hidden_width, 1)
         self.apply(initialize_weights)
 
     def forward(self, x):
         x = self.fc_layer(x)
         x = F.layer_norm(x, x.size())
         x = F.leaky_relu(x)
-        x = self.hidden_layer(x)      
-        x = F.layer_norm(x, x.size())
-        x = F.leaky_relu(x)
+        for hidden_layer in self.hidden_layers:
+            x = hidden_layer(x)
+            x = F.layer_norm(x, x.size())
+            x = F.leaky_relu(x)
         return self.linear_layer(x)
     
 
@@ -78,10 +82,13 @@ def compute_weight_norm(model):
     return torch.sqrt(total)
 
 def spec_to_name(spec: dict) -> str:
-    short_hand_mapping={'optimizer':    '',
-                        'gamma':        '_gam',
-                        'lamda':        'lam',
+    short_hand_mapping={
+                        'optimizer':    '',
+                        'hidden_depth': '_net',
+                        'hidden_width':  'x',
+                        'lamda':        '_lam',
                         'kappa':        'k',
+                        'gamma':        'gam',
                         'entrywise_normalization': 'en',
                         'beta2':        'b2',
                         'u_trace':      'u',
@@ -91,6 +98,8 @@ def spec_to_name(spec: dict) -> str:
                         'delta_trace':  'delTr',
                         'sig_power':    'sigP',
                         'in_trace_sample_scaling': 'itss',
+                        'delta_clip':   'delClip',
+                        'delta_norm':   'delNorm',
                         }
     list_params = []
     for key in short_hand_mapping:
@@ -109,7 +118,6 @@ class StreamAC(nn.Module):
         policy_spec: dict,
         critic_spec: dict,
         observer_spec: dict = {'optimizer':'none'},
-        hidden_size: int = 128,
     ):
         super().__init__()
 
@@ -118,11 +126,6 @@ class StreamAC(nn.Module):
         self.critic_spec   = dict(critic_spec or {})
         self.observer_spec = dict(observer_spec or {})
 
-        # ---- Nets ----
-        self.policy_net = Actor(n_obs=n_obs, n_actions=n_actions, hidden_size=hidden_size)
-        self.critic_net = Critic(n_obs=n_obs, hidden_size=hidden_size)
-        self.observer_net = Critic(n_obs=n_obs, hidden_size=hidden_size)
-
         # ---- Hyperparameters ----
         self.gamma_policy   = float(self.policy_spec.get('gamma'))
         self.gamma_critic   = float(self.critic_spec.get('gamma'))
@@ -130,6 +133,13 @@ class StreamAC(nn.Module):
         self.observer_exists = str(self.observer_spec.get('optimizer', 'none')).lower() != 'none'
         if self.observer_exists:
             self.gamma_observer = float(self.observer_spec.get('gamma'))    
+        
+        # ---- Nets ----
+        self.policy_net = Actor(n_obs=n_obs, n_actions=n_actions, hidden_depth=self.policy_spec ['hidden_depth'], hidden_width=self.policy_spec ['hidden_width'])
+        self.critic_net = Critic(n_obs=n_obs, hidden_depth=self.critic_spec['hidden_depth'], hidden_width=self.critic_spec['hidden_width'])
+        if self.observer_exists:
+            self.observer_net = Critic(n_obs=n_obs, hidden_depth=self.observer_spec['hidden_depth'], hidden_width=self.observer_spec['hidden_width'])
+
         
         # ---- Optimizers (per-spec) ----
         self.optimizer_policy   = self._build_optimizer(self.policy_net.parameters(),   self.policy_spec,   role="policy")
@@ -156,6 +166,8 @@ class StreamAC(nn.Module):
         delta_trace = float(spec.get('delta_trace', 0.01))
         sig_power = float(spec.get('sig_power', 2))
         in_trace_sample_scaling = spec.get('delta_trace', False)
+        delta_clip = spec.get('delta_clip', 'none')
+        delta_norm = spec.get('delta_norm', 'none')
 
 
         if opt_name == 'obgd':
@@ -191,7 +203,19 @@ class StreamAC(nn.Module):
                 params, gamma=gamma, lamda=lamda, kappa=kappa,  weight_decay=weight_decay, sig_power=sig_power, delta_trace=delta_trace,
                 entrywise_normalization=entrywise_normalization, beta2=beta2, in_trace_sample_scaling=in_trace_sample_scaling
             )
+        
+        if opt_name == 'obt':
+            return Obt_Optimizer(
+                params, gamma=gamma, lamda=lamda, kappa=kappa,  weight_decay=weight_decay, sig_power=sig_power, delta_clip=delta_clip,  delta_norm=delta_norm,
+                entrywise_normalization=entrywise_normalization, beta2=beta2, in_trace_sample_scaling=in_trace_sample_scaling
+            )
 
+        if opt_name == 'obtnnz':
+            return Obtnnz_Optimizer(
+                params, gamma=gamma, lamda=lamda, kappa=kappa,  weight_decay=weight_decay, delta_clip=delta_clip,  delta_norm=delta_norm,
+                u_trace=u_trace, entrywise_normalization=entrywise_normalization, beta2=beta2
+            )
+        
         raise ValueError(f"Unknown optimizer '{spec.get('optimizer')}' for role '{role}'.")
 
 
@@ -478,13 +502,15 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
 
 
 if __name__ == '__main__':
-    optimizer_choices = ['none', 'ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD', 'ObtC', 'ObtN']
+    optimizer_choices = ['none', 'ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD', 'ObtC', 'ObtN', 'Obt', 'Obtnnz']
     parser = argparse.ArgumentParser(description='Stream AC(λ)')
     parser.add_argument('--env_name', type=str, default='Ant-v5')  # HalfCheetah-v4
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--total_steps', type=int, default=2_000_000)
     parser.add_argument('--max_time', type=str, default='1000:00:00')  # in HH:MM:SS
 
+    parser.add_argument('--policy_hidden_depth', type=int, default=2)
+    parser.add_argument('--policy_hidden_width', type=int, default=128)
     parser.add_argument('--policy_optimizer', type=str, default='ObGD', choices=optimizer_choices)
     parser.add_argument('--policy_kappa', type=float, default=3.0)
     parser.add_argument('--policy_gamma', type=float, default=0.99)
@@ -498,7 +524,11 @@ if __name__ == '__main__':
     parser.add_argument('--policy_weight_decay', type=float, default=0.0) 
     parser.add_argument('--policy_in_trace_sample_scaling', type=str, default='True', choices=['True', 'False'])  # for Obt
     parser.add_argument('--policy_sig_power', type=float, default=2) # for Obt
+    parser.add_argument('--policy_delta_clip', type=str, default='none') # for Obt    # 'none', '1', '10_avg_sq__dec_0.99', '10_avg_abs__dec_0.95', '10_avg_abs_max_1__dec_0.9', '10_avg_sq_max_20avg__dec_0.99'
+    parser.add_argument('--policy_delta_norm', type=str, default='none') # for Obt    # 'none', '99sq', '99abs', '995clipSq', '995clipAbs'
     
+    parser.add_argument('--critic_hidden_depth', type=int, default=2)
+    parser.add_argument('--critic_hidden_width', type=int, default=128)
     parser.add_argument('--critic_optimizer', type=str, default='ObnC', choices=optimizer_choices)
     parser.add_argument('--critic_kappa', type=float, default=2.0)
     parser.add_argument('--critic_gamma', type=float, default=0.99)
@@ -511,7 +541,11 @@ if __name__ == '__main__':
     parser.add_argument('--critic_weight_decay', type=float, default=0.0) 
     parser.add_argument('--critic_in_trace_sample_scaling', type=str, default='True', choices=['True', 'False']) # for Obt
     parser.add_argument('--critic_sig_power', type=float, default=2) # for Obt
-    
+    parser.add_argument('--critic_delta_clip', type=str, default='none') # for Obt    # 'none', '1', '10_avg_sq__dec_0.99', '10_avg_abs__dec_0.95', '10_avg_abs_max_1__dec_0.9', '10_avg_sq_max_20avg__dec_0.99'
+    parser.add_argument('--critic_delta_norm', type=str, default='none') # for Obt    # 'none', '99sq', '99abs', '995clipSq', '995clipAbs'
+
+    parser.add_argument('--observer_hidden_depth', type=int, default=2)
+    parser.add_argument('--observer_hidden_width', type=int, default=128)
     parser.add_argument('--observer_optimizer', type=str, default='none', choices=optimizer_choices)
     parser.add_argument('--observer_kappa', type=float, default=2.0)
     parser.add_argument('--observer_gamma', type=float, default=0.99)
@@ -524,6 +558,8 @@ if __name__ == '__main__':
     parser.add_argument('--observer_weight_decay', type=float, default=0.0) 
     parser.add_argument('--observer_in_trace_sample_scaling', type=str, default='True', choices=['True', 'False']) # for Obt
     parser.add_argument('--observer_sig_power', type=float, default=2) # for Obt
+    parser.add_argument('--observer_delta_clip', type=str, default='none') # for Obt    # 'none', '1', '10_avg_sq__dec_0.99', '10_avg_abs__dec_0.95', '10_avg_abs_max_1__dec_0.9', '10_avg_sq_max_20avg__dec_0.99'
+    parser.add_argument('--observer_delta_norm', type=str, default='none') # for Obt    # 'none', '99sq', '99abs', '995clipSq', '995clipAbs'
     
     parser.add_argument('--log_backend', type=str, default='none', choices=['none', 'tensorboard', 'wandb', 'wandb_offline'])
     parser.add_argument('--log_dir', type=str, default='/home/asharif/StreamX_optimizer/WandB_offline', help='WandB offline log dir (if backend=wandb_offline)')
@@ -538,7 +574,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # ---- Spec dicts ----
-    shared_params = ['optimizer', 'kappa', 'gamma', 'lamda', 'weight_decay']
+    shared_params = ['optimizer', 'kappa', 'gamma', 'lamda', 'weight_decay', 'hidden_depth', 'hidden_width']
     required_optimizer_params = {
         'none':         [],  # for observer
         'ObGD':         shared_params + ['lr'],
@@ -550,6 +586,8 @@ if __name__ == '__main__':
         'ObnN':         shared_params + ['lr', 'entrywise_normalization', 'beta2', 'u_trace', 'delta_trace'],
         'ObtC':         shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling'],
         'ObtN':         shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'delta_trace'],
+        'Obt':          shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'delta_clip', 'delta_norm'],
+        'Obtnnz':       shared_params + ['entrywise_normalization', 'beta2', 'u_trace', 'delta_clip', 'delta_norm'],
     }
 
     def build_spec(kind, args, required_optimizer_params) -> dict:

@@ -39,8 +39,131 @@ def load_pickle(data_dir):
     return all_episodic_returns, all_termination_time_steps
 
 
+def resolve_label_color_active(run_dir, label_and_color_map):
+    label, color, active = run_dir, 'grey', True
+    for key, cfg in label_and_color_map.items():
+        if key in run_dir:
+            label = cfg.get('label', label)
+            color = cfg.get('color', color)
+            active = str(cfg.get('plot', 'yes')).lower() not in ['no', 'false', '0']
+    if color == 'black':  # avoid 'tab:black' -> use gray fill
+        color = 'gray'
+    return label, color, active
 
-def main(data_dir, title,  int_space, total_steps, label_and_color_map):
+def load_and_compute_curve(data_dir, run_dir, int_space, total_steps):
+    episodic_returns, termination_steps = load_pickle(os.path.join(data_dir, run_dir))
+    return avg_return_curve(termination_steps, episodic_returns, int_space, total_steps)
+
+
+def main_plot_in_separate_figures(data_dir, title, int_space, total_steps, label_and_color_map):
+    # One figure per environment (many curves), saved as plots/{title}.pdf
+    run_dirs = sorted([d for d in os.listdir(data_dir) if d != '.DS_Store'])
+    os.makedirs("plots", exist_ok=True)
+
+    plt.figure(figsize=(8, 5))
+    legend_handles, legend_labels = [], []
+    for run_dir in run_dirs:
+        label, color, active = resolve_label_color_active(run_dir, label_and_color_map)
+        if not active: 
+            continue
+        steps, average_return, stderr_return = load_and_compute_curve(data_dir, run_dir, int_space, total_steps)
+        handle = plt.fill_between(steps, average_return - stderr_return, average_return + stderr_return,
+                                  color=f"tab:{color}", alpha=0.35)
+        line_handle, = plt.plot(steps, average_return, linewidth=2, color=color, label=label)
+        if label not in legend_labels:
+            legend_handles.append(line_handle); legend_labels.append(label)
+
+    plt.xlabel("Time Step"); plt.ylabel("Average Episodic Return")
+    plt.title(title)
+    if legend_handles: plt.legend(legend_handles, legend_labels)
+    plt.savefig(f"plots/{title}.pdf", bbox_inches='tight', dpi=300)
+    plt.close()
+
+
+
+
+def main_plot_all_in_single_figure(data_dir, title, int_space, total_steps, label_and_color_map):
+    #One big 2x3 figure:  5 subplots = 5 environments
+    if not hasattr(main_plot_all_in_single_figure, "_accum"):
+        os.makedirs("plots", exist_ok=True)
+        fig, axes = plt.subplots(2, 3, figsize=(12, 7), sharex=True, constrained_layout=True)
+        axes = axes.ravel()
+        legend_ax = axes[5]; legend_ax.axis('off')
+
+        # Hide redundant y-tick labels: keep on axes[0] and axes[3] (first col)
+        for i in [1, 2, 4]:
+            axes[i].tick_params(labelleft=False)
+
+        main_plot_all_in_single_figure._accum = {
+            "fig": fig,
+            "axes": axes,
+            "legend_ax": legend_ax,
+            "legend_handles": [],
+            "legend_labels": [],
+            "index": 0,
+            "row_stats": {
+                0: {"ymin": float("inf"), "ymax": float("-inf"), "axes": [axes[0], axes[1], axes[2]]},
+                1: {"ymin": float("inf"), "ymax": float("-inf"), "axes": [axes[3], axes[4]]},
+            }
+        }
+
+    A = main_plot_all_in_single_figure._accum
+    if A["index"] >= 5:
+        A["fig"].savefig("plots/All_Environments.pdf", bbox_inches='tight', dpi=300)
+        plt.close(A["fig"])
+        delattr(main_plot_all_in_single_figure, "_accum")
+        return
+
+    # Plot this environment into the next slot
+    ax = A["axes"][A["index"]]
+    env_name = title
+    run_dirs = sorted([d for d in os.listdir(data_dir) if d != '.DS_Store'])
+    row_id = 0 if A["index"] < 3 else 1
+
+    for run_dir in run_dirs:
+        label, color, active = resolve_label_color_active(run_dir, label_and_color_map)
+        if not active:
+            continue
+        steps, avg, se = load_and_compute_curve(data_dir, run_dir, int_space, total_steps)
+        ax.fill_between(steps, avg - se, avg + se, color=f"tab:{color}", alpha=0.35)
+        line_handle, = ax.plot(steps, avg, linewidth=2, color=color, label=label)
+        if label not in A["legend_labels"]:
+            A["legend_handles"].append(line_handle); A["legend_labels"].append(label)
+
+        # Update row-wise min/max
+        y_low = float((avg - se).min()); y_high = float((avg + se).max())
+        A["row_stats"][row_id]["ymin"] = min(A["row_stats"][row_id]["ymin"], y_low)
+        A["row_stats"][row_id]["ymax"] = max(A["row_stats"][row_id]["ymax"], y_high)
+
+    ax.set_title(env_name, fontsize=11)
+    ax.grid(True, linestyle='--', linewidth=0.5, alpha=0.4)
+    A["index"] += 1
+
+    # Normalize y-limits when a row completes
+    if A["index"] in (3, 5):
+        rs = A["row_stats"][row_id]
+        if rs["ymin"] < rs["ymax"]:
+            pad = 0.02 * (rs["ymax"] - rs["ymin"])
+            for ax_row in rs["axes"]:
+                ax_row.set_ylim(rs["ymin"] - pad, rs["ymax"] + pad)
+
+    # Finalize after the 5th environment
+    if A["index"] == 5:
+        A["fig"].supxlabel("Time Step")
+        A["fig"].supylabel("Average Episodic Return")
+        A["fig"].suptitle("All Environments", y=1.02)
+        if A["legend_handles"]:
+            A["legend_ax"].legend(A["legend_handles"], A["legend_labels"], loc='center', frameon=False)
+        A["fig"].savefig("plots/All_Environments.pdf", bbox_inches='tight', dpi=300)
+        plt.close(A["fig"])
+        delattr(main_plot_all_in_single_figure, "_accum")
+
+
+
+
+
+
+def main_old(data_dir, title,  int_space, total_steps, label_and_color_map):
     plt.figure(figsize=(8, 5))
     run_dirs = [x for x in  os.listdir(data_dir) if x!='.DS_Store']
     run_dirs = sorted(run_dirs)
@@ -90,7 +213,8 @@ if __name__ == '__main__':
 
     env_name = args.env_name
     #main(data_dir = os.path.join(args.mother_dir,env_name), title=env_name, int_space=args.int_space, total_steps=args.total_steps, label_and_color_map=label_and_color_map)
-    for env_name in ['Ant', 'HalfCheetah', 'Hopper', 'Walker', 'Humanoid']:
+    for env_name in ['Ant', 'HalfCheetah', 'Humanoid', 'Hopper', 'Walker']:
         print(env_name)
-        main(data_dir = os.path.join(args.mother_dir,env_name), title=env_name, int_space=args.int_space, total_steps=args.total_steps, label_and_color_map=label_and_color_map)
-    
+        #main_old(data_dir = os.path.join(args.mother_dir,env_name), title=env_name, int_space=args.int_space, total_steps=args.total_steps, label_and_color_map=label_and_color_map)
+        #main_plot_in_separate_figures(data_dir = os.path.join(args.mother_dir,env_name), title=env_name, int_space=args.int_space, total_steps=args.total_steps, label_and_color_map=label_and_color_map)
+        main_plot_all_in_single_figure(data_dir = os.path.join(args.mother_dir,env_name), title=env_name, int_space=args.int_space, total_steps=args.total_steps, label_and_color_map=label_and_color_map)

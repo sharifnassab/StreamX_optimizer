@@ -111,7 +111,7 @@ if 0: # was not good
 
 
 
-if 1: 
+if 0: 
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['ObGD'],
@@ -128,7 +128,7 @@ if 1:
         "seed":                 seeds,
     })
 
-if 1: 
+if 0: 
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['ObGD'],
@@ -145,7 +145,7 @@ if 1:
         "seed":                 seeds,
     })
 
-if 1: 
+if 0: 
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['ObGD'],
@@ -163,7 +163,7 @@ if 1:
         "seed":                 seeds,
     })
 
-if 1: 
+if 0: 
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['ObtN'],
@@ -186,6 +186,53 @@ if 1:
     })
 
 
+if 1: 
+    HYPER_SWEEPS.append({
+        "env_name":             environments,
+        "policy_optimizer":     ['Obt'],
+        "policy_lamda":         [0.8],
+        "policy_kappa":         [20,30], # 20 was best most of the time
+        "policy_entrywise_normalization": ['RMSProp'],
+        "policy_beta2":         [0.999],
+        "policy_delta_clip":   ['1', '10_avg_sq_max_10avg__dec_0.9998'],
+        "policy_delta_norm":   ['none', '.9998clipSq'],
+        "policy_sig_power":     [2],
+        "policy_in_trace_sample_scaling":['False'],
+        "policy_entropy_coeff": [0.01],
+        "critic_optimizer":     ['ObtC'],
+        "critic_lamda":         [0.8],
+        "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
+        "critic_entrywise_normalization": ['RMSProp'],
+        "critic_beta2":         [0.999],
+        "critic_sig_power":     [2],
+        "critic_in_trace_sample_scaling":['False'],
+        "seed":                 seeds,
+    })
+
+
+if 1: 
+    HYPER_SWEEPS.append({
+        "env_name":             environments,
+        "policy_optimizer":     ['Obtnnz'],
+        "policy_lamda":         [0.8],
+        "policy_kappa":         [20,30], # 20 was best most of the time
+        "policy_entrywise_normalization": ['RMSProp'],
+        "policy_beta2":         [0.999],
+        "policy_u_trace":       [0.01],
+        "policy_delta_clip":   ['1'],
+        "policy_delta_norm":   ['.9998clipSq'],
+        "policy_entropy_coeff": [0.01],
+        "critic_optimizer":     ['ObtC'],
+        "critic_lamda":         [0.8],
+        "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
+        "critic_entrywise_normalization": ['RMSProp'],
+        "critic_beta2":         [0.999],
+        "critic_sig_power":     [2],
+        "critic_in_trace_sample_scaling":['False'],
+        "seed":                 seeds,
+    })
+
+    
 
 # ------------------------------------------------------------------
 # --------- 2. Normally nothing below needs editing ----------------
