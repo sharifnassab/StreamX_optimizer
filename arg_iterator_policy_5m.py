@@ -3,9 +3,9 @@ from _slurm_generator import generate_slurm
 
 RESOURCE_DEFAULTS = {
     "account":  "def-sutton",
-    "max_time": "08:00:00",
+    "max_time": "10:00:00",
     "cpus":     1,
-    "mem":     '2G',
+    "mem":     '4G',
     "gpus":    '0',   #  v100:1,  0
     "constraint": "granite"    # this is a CPU type on Nibi
 }
@@ -109,45 +109,26 @@ if 0: # was not good
     })
 
 
-
-
-if 0: 
+if 1: 
     HYPER_SWEEPS.append({
         "env_name":             environments,
+        "critic_hidden_depth":  [2,5],
+        "critic_hidden_width":  [512],
         "policy_optimizer":     ['ObGD'],
         "policy_kappa":         [3], # 3 is optimum consistently
         "policy_entropy_coeff": [0.01],
         "policy_lamda":         [0.8],
-        "critic_optimizer":     ['ObtC'],
         "critic_lamda":         [0.8],
-        "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
-        "critic_entrywise_normalization": ['RMSProp'],
-        "critic_beta2":         [0.999],
-        "critic_sig_power":     [2],
-        "critic_in_trace_sample_scaling":['False', 'True'],
+        "critic_optimizer":     ['ObGD'],   # ['ObGD', 'AdaptiveObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC'],
+        "critic_kappa":         [2.0],
         "seed":                 seeds,
     })
 
-if 0: 
+if 1: 
     HYPER_SWEEPS.append({
         "env_name":             environments,
-        "policy_optimizer":     ['ObGD'],
-        "policy_kappa":         [3], # 3 is optimum consistently
-        "policy_entropy_coeff": [0.01],
-        "policy_lamda":         [0.8],
-        "critic_optimizer":     ['ObtC'],
-        "critic_lamda":         [0.8],
-        "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
-        "critic_entrywise_normalization": ['RMSProp'],
-        "critic_beta2":         [0.999],
-        "critic_sig_power":     [1],
-        "critic_in_trace_sample_scaling":['False'],
-        "seed":                 seeds,
-    })
-
-if 0: 
-    HYPER_SWEEPS.append({
-        "env_name":             environments,
+        "critic_hidden_depth":  [2,5],
+        "critic_hidden_width":  [512],
         "policy_optimizer":     ['ObGD'],
         "policy_kappa":         [3], # 3 is optimum consistently
         "policy_entropy_coeff": [0.01],
@@ -159,7 +140,6 @@ if 0:
         "critic_beta2":         [0.999],
         "critic_sig_power":     [2],
         "critic_in_trace_sample_scaling":['False'],
-        "critic_weight_decay":  [0.00001, 0.0001],
         "seed":                 seeds,
     })
 
@@ -186,7 +166,7 @@ if 0:
     })
 
 
-if 1: 
+if 0: 
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['Obt'],
@@ -210,7 +190,7 @@ if 1:
     })
 
 
-if 1: 
+if 0: 
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['Obtnnz'],
