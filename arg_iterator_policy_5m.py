@@ -112,8 +112,8 @@ if 0: # was not good
 if 1: 
     HYPER_SWEEPS.append({
         "env_name":             environments,
-        "critic_hidden_depth":  [2,5],
-        "critic_hidden_width":  [512],
+        "critic_hidden_depth":  [5],
+        "critic_hidden_width":  [128],
         "policy_optimizer":     ['ObGD'],
         "policy_kappa":         [3], # 3 is optimum consistently
         "policy_entropy_coeff": [0.01],
@@ -127,8 +127,8 @@ if 1:
 if 1: 
     HYPER_SWEEPS.append({
         "env_name":             environments,
-        "critic_hidden_depth":  [2,5],
-        "critic_hidden_width":  [512],
+        "critic_hidden_depth":  [5],
+        "critic_hidden_width":  [128],
         "policy_optimizer":     ['ObGD'],
         "policy_kappa":         [3], # 3 is optimum consistently
         "policy_entropy_coeff": [0.01],
