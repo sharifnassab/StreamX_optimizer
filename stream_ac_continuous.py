@@ -130,7 +130,7 @@ class StreamAC(nn.Module):
         self.gamma_policy   = float(self.policy_spec.get('gamma'))
         self.gamma_critic   = float(self.critic_spec.get('gamma'))
         self.entropy_coeff  = float(self.policy_spec.get('entropy_coeff'))
-        self.observer_exists = str(self.observer_spec.get('optimizer', 'none')).lower() != 'none'
+        self.observer_exists = str(self.observer_spec.get('optimizer', 'none')).lower() not in ['none','monte_carlo']
         if self.observer_exists:
             self.gamma_observer = float(self.observer_spec.get('gamma'))    
         
@@ -150,7 +150,7 @@ class StreamAC(nn.Module):
     def _build_optimizer(self, params, spec: dict, role: str):
         spec = spec or {}
         opt_name = spec.get('optimizer', 'none').strip().lower()
-        if opt_name == 'none':
+        if opt_name in ['none','monte_carlo']:
             return None
         
         lr     = float(spec.get('lr', 3e-4))
@@ -310,6 +310,15 @@ class StreamAC(nn.Module):
 
         return  {'policy':info_policy, 'critic':info_critic, 'observer':info_observer}
 
+def compute_monte_carlo_v_at_the_end_of_episode(list_ep_R, gamma):
+    G = 0.0
+    list_v = []
+    for r in reversed(list_ep_R):
+        G = r + gamma * G
+        list_v.append(G+0.0)
+    return [v for v in reversed(list_v)]
+
+
 def compute_prediction_MSE(list_ep_R, list_ep_v, gamma):
     G = 0.0; ep_sse = 0.0; ep_abss = 0.0
     for v, r in zip(reversed(list_ep_v), reversed(list_ep_R)):
@@ -412,11 +421,11 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
                 section = step_info.get(net_type) or {}
                 for metric, val in section.items():
                     expanded_step_info[f'{net_type}/{metric}'] = val
-            expanded_step_info.update({
-                                    'rewards/original':info['reward_immediate'], 
-                                    'rewards/scaled':r,
-                                    'rewards/ratio': r/info['reward_immediate'],
-                                  })
+            # expanded_step_info.update({
+            #                         'rewards/original':info['reward_immediate'], 
+            #                         'rewards/scaled':r,
+            #                         'rewards/ratio': r/info['reward_immediate'],
+            #                       })
             logger.log(expanded_step_info, step=t)
 
 
@@ -430,10 +439,15 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
                 ep_pred_error_end_of_episode_W = compute_prediction_MSE_end_of_episode_W(list_ep_R, list_ep_S, agent.observer_net, agent.gamma_observer)
             ep_pred_error_critic = compute_prediction_MSE(list_ep_R, list_ep_v['critic'], agent.gamma_critic)
             
+            if observer_spec['optimizer'] == 'monte_carlo':
+                monte_carlo_v = compute_monte_carlo_v_at_the_end_of_episode(list_ep_R, observer_spec['gamma'])
+                if (t % 500_000) <= 3001: 
+                    for ii in range(ep_steps):
+                        logger.log({"v(s)": monte_carlo_v[ii], "td_error":list_ep_R[ii]}, step=t-ep_steps+ii+1)
 
             ep_return = info["episode"]["r"]
             ep_len = info["episode"].get("l", ep_steps)
-            avg_min_inv_M = ep_min_inv_M_sum / max(ep_steps, 1) if ep_min_inv_M_sum > 0 else None
+            # avg_min_inv_M = ep_min_inv_M_sum / max(ep_steps, 1) if ep_min_inv_M_sum > 0 else None
             avg_policy_std = ep_policy_std / max(ep_steps, 1) if ep_policy_std > 0 else None
 
             log_payload = {
@@ -502,7 +516,7 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
 
 
 if __name__ == '__main__':
-    optimizer_choices = ['none', 'ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD', 'ObtC', 'ObtN', 'Obt', 'Obtnnz']
+    optimizer_choices = ['ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD', 'ObtC', 'ObtN', 'Obt', 'Obtnnz']
     parser = argparse.ArgumentParser(description='Stream AC(λ)')
     parser.add_argument('--env_name', type=str, default='Ant-v5')  # HalfCheetah-v4
     parser.add_argument('--seed', type=int, default=0)
@@ -546,7 +560,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--observer_hidden_depth', type=int, default=2)
     parser.add_argument('--observer_hidden_width', type=int, default=128)
-    parser.add_argument('--observer_optimizer', type=str, default='none', choices=optimizer_choices)
+    parser.add_argument('--observer_optimizer', type=str, default='none', choices=optimizer_choices+['none','monte_carlo'])
     parser.add_argument('--observer_kappa', type=float, default=2.0)
     parser.add_argument('--observer_gamma', type=float, default=0.99)
     parser.add_argument('--observer_lamda', type=float, default=0.0)
@@ -576,7 +590,8 @@ if __name__ == '__main__':
     # ---- Spec dicts ----
     shared_params = ['optimizer', 'kappa', 'gamma', 'lamda', 'weight_decay', 'hidden_depth', 'hidden_width']
     required_optimizer_params = {
-        'none':         [],  # for observer
+        'none':         [],         # for observer
+        'monte_carlo':  ['gamma'],  # for observer
         'ObGD':         shared_params + ['lr'],
         'ObGD_sq':      shared_params + ['lr'],
         'ObGD_sq_plain':shared_params + ['lr'],

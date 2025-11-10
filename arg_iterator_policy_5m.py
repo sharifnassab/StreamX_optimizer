@@ -3,9 +3,9 @@ from _slurm_generator import generate_slurm
 
 RESOURCE_DEFAULTS = {
     "account":  "def-sutton",
-    "max_time": "10:00:00",
+    "max_time": "08:00:00",
     "cpus":     1,
-    "mem":     '4G',
+    "mem":     '2G',
     "gpus":    '0',   #  v100:1,  0
     "constraint": "granite"    # this is a CPU type on Nibi
 }
@@ -109,11 +109,11 @@ if 0: # was not good
     })
 
 
-if 1: 
+if 0: 
     HYPER_SWEEPS.append({
         "env_name":             environments,
-        "critic_hidden_depth":  [5],
-        "critic_hidden_width":  [128],
+        "critic_hidden_depth":  [2,5],
+        "critic_hidden_width":  [512],
         "policy_optimizer":     ['ObGD'],
         "policy_kappa":         [3], # 3 is optimum consistently
         "policy_entropy_coeff": [0.01],
@@ -124,11 +124,11 @@ if 1:
         "seed":                 seeds,
     })
 
-if 1: 
+if 0: 
     HYPER_SWEEPS.append({
         "env_name":             environments,
-        "critic_hidden_depth":  [5],
-        "critic_hidden_width":  [128],
+        "critic_hidden_depth":  [2,5],
+        "critic_hidden_width":  [512],
         "policy_optimizer":     ['ObGD'],
         "policy_kappa":         [3], # 3 is optimum consistently
         "policy_entropy_coeff": [0.01],

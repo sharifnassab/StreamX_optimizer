@@ -40,12 +40,12 @@ def load_pickle(data_dir):
 
 
 def resolve_label_color_active(run_dir, label_and_color_map):
-    label, color, active = run_dir, 'grey', True
+    label, color, active = run_dir, 'grey', False
     for key, cfg in label_and_color_map.items():
         if key in run_dir:
             label = cfg.get('label', label)
             color = cfg.get('color', color)
-            active = str(cfg.get('plot', 'yes')).lower() not in ['no', 'false', '0']
+            active = str(cfg.get('plot', 'no')).lower() not in ['no', 'false', '0'] 
     if color == 'black':  # avoid 'tab:black' -> use gray fill
         color = 'gray'
     return label, color, active
@@ -122,6 +122,7 @@ def main_plot_all_in_single_figure(data_dir, title, int_space, total_steps, labe
 
     for run_dir in run_dirs:
         label, color, active = resolve_label_color_active(run_dir, label_and_color_map)
+        print(active, run_dir)
         if not active:
             continue
         steps, avg, se = load_and_compute_curve(data_dir, run_dir, int_space, total_steps)
@@ -190,18 +191,22 @@ if __name__ == '__main__':
     import argparse
 
     label_and_color_map = {
-        'Policy__ObGD__gam_0.99_lam_0.0_k_3.0_ent_0.01_lr_1.0_wd_0.0_____Critic__ObGD__gam_0.99_lam_0.0_k_2.0_lr_1.0_wd_0.0':
-        {'plot':'no', 'label':r'ObGD - ObGD  ($\lambda=0$)', 'color':'grey'},
-        'Policy__ObGD__gam_0.99_lam_0.0_k_3.0_ent_0.01_lr_1.0_wd_0.0_____Critic__ObnC__gam_0.99_lam_0.0_k_2.0_en_RMSProp_b2_0.999_u_0.01_lr_1.0_wd_0.0':
-        {'plot':'no', 'label':r'ObGD - ObnC  ($\lambda=0$)', 'color':'orange'},
-        'Policy__ObnN__gam_0.99_lam_0.0_k_20.0_en_RMSProp_b2_0.999_u_0.01_ent_0.01_lr_1.0_wd_0.0_delTr_0.01_____Critic__ObnC__gam_0.99_lam_0.0_k_2.0_en_RMSProp_b2_0.999_u_0.01_lr_1.0_wd_0.0':
-        {'plot':'no', 'label':r'ObnN - ObnC  ($\lambda=0$)', 'color':'red'},
+        # 'Policy__ObGD__gam_0.99_lam_0.0_k_3.0_ent_0.01_lr_1.0_wd_0.0_____Critic__ObGD__gam_0.99_lam_0.0_k_2.0_lr_1.0_wd_0.0':
+        # {'plot':'no', 'label':r'ObGD - ObGD  ($\lambda=0$)', 'color':'grey'},
+        # 'Policy__ObGD__gam_0.99_lam_0.0_k_3.0_ent_0.01_lr_1.0_wd_0.0_____Critic__ObnC__gam_0.99_lam_0.0_k_2.0_en_RMSProp_b2_0.999_u_0.01_lr_1.0_wd_0.0':
+        # {'plot':'no', 'label':r'ObGD - ObnC  ($\lambda=0$)', 'color':'orange'},
+        # 'Policy__ObnN__gam_0.99_lam_0.0_k_20.0_en_RMSProp_b2_0.999_u_0.01_ent_0.01_lr_1.0_wd_0.0_delTr_0.01_____Critic__ObnC__gam_0.99_lam_0.0_k_2.0_en_RMSProp_b2_0.999_u_0.01_lr_1.0_wd_0.0':
+        # {'plot':'no', 'label':r'ObnN - ObnC  ($\lambda=0$)', 'color':'purple'},
         'Policy__ObGD__gam_0.99_lam_0.8_k_3.0_ent_0.01_lr_1.0_wd_0.0_____Critic__ObGD__gam_0.99_lam_0.8_k_2.0_lr_1.0_wd_0.0':
-        {'plot':'yes', 'label':r'ObGD - ObGD  ($\lambda=0.8$)', 'color':'blue'},
+        {'plot':'yes', 'label':r'ObGD - ObGD  ($\lambda=0.8, net_{critic}: 2x128$)', 'color':'blue'},
         'Policy__ObGD__gam_0.99_lam_0.8_k_3.0_ent_0.01_lr_1.0_wd_0.0____-Critic__ObtC__gam_0.99_lam_0.8_k_2.0_en_RMSProp_b2_0.999_wd_0.0_sigP_2.0_itss_False':
-        {'plot':'yes', 'label':r'ObGD - ObtC  ($\lambda=0.8$)', 'color':'black'},
-        'Policy__ObtN__gam_0.99_lam_0.8_k_20.0_en_RMSProp_b2_0.999_ent_0.01_wd_0.0_delTr_0.01_sigP_2.0_itss_False____-Critic__ObtC__gam_0.99_lam_0.8_k_2.0_en_RMSProp_b2_0.999_wd_0.0_sigP_2.0_itss_False':
-        {'plot':'yes', 'label':r'ObtN - ObtC  ($\lambda=0.8$)', 'color':'green'},
+        {'plot':'yes', 'label':r'ObGD - ObtC  ($\lambda=0.8, net_{critic}: 2x128$)', 'color':'red'},
+        # 'Policy__ObtN__gam_0.99_lam_0.8_k_20.0_en_RMSProp_b2_0.999_ent_0.01_wd_0.0_delTr_0.01_sigP_2.0_itss_False____-Critic__ObtC__gam_0.99_lam_0.8_k_2.0_en_RMSProp_b2_0.999_wd_0.0_sigP_2.0_itss_False':
+        # {'plot':'yes', 'label':r'ObtN - ObtC  ($\lambda=0.8$)', 'color':'green'},
+        'Policy__ObGD__net_2_x_128__lam_0.8_k_3.0_gam_0.99_ent_0.01_lr_1.0_wd_0.0____-Critic__ObGD__net_5_x_512__lam_0.8_k_2.0_gam_0.99_lr_1.0_wd_0.0':
+        {'plot':'yes', 'label':r'ObGD - ObGD  ($\lambda=0.8, net_{critic}: 5x512$)', 'color':'cyan'},
+        'Policy__ObGD__net_2_x_128__lam_0.8_k_3.0_gam_0.99_ent_0.01_lr_1.0_wd_0.0____-Critic__ObtC__net_5_x_512__lam_0.8_k_2.0_gam_0.99_en_RMSProp_b2_0.999_wd_0.0_sigP_2.0_itss_False':
+        {'plot':'yes', 'label':r'ObGD - ObtC  ($\lambda=0.8, net_{critic}: 5x512$)', 'color':'orange'},
     }
 
     parser = argparse.ArgumentParser()
