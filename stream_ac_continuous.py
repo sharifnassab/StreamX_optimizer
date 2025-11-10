@@ -443,7 +443,7 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
                 monte_carlo_v = compute_monte_carlo_v_at_the_end_of_episode(list_ep_R, observer_spec['gamma'])
                 if (t % 500_000) <= 3001: 
                     for ii in range(ep_steps):
-                        logger.log({"v(s)": monte_carlo_v[ii], "td_error":list_ep_R[ii]}, step=t-ep_steps+ii+1)
+                        logger.log({"observer/v(s)": monte_carlo_v[ii], "observer/delta":list_ep_R[ii], "observer/td_error":list_ep_R[ii]}, step=t-ep_steps+ii+1)
 
             ep_return = info["episode"]["r"]
             ep_len = info["episode"].get("l", ep_steps)

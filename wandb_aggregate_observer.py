@@ -9,6 +9,11 @@ intervals, and logs the results to a new "lite" project.
 
 It is designed to be run incrementally, processing only groups that have
 been updated since the last run.
+
+*** MODIFIED VERSION ***
+This version buffers all log data in memory first, then sorts it by step
+and logs it all at once. This fixes the "Steps must be monotonically
+increasing" warning.
 """
 
 
@@ -26,7 +31,7 @@ import time
 # --- 1. CONFIGURATION ---
 # (Fill these in)
 
-ENV = "Ant" #  Ant  HalfCheetah  Hopper  Walker2d  Humanoid
+ENV = "Hopper" #  Ant  HalfCheetah  Hopper  Walker2d  Humanoid
 
 # Your source project (the "heavy" one)
 SOURCE_PROJECT = f"spo_alpaca/StreamX_OptDesign_Observe_{ENV}-v5"
@@ -40,6 +45,7 @@ GROUP_CONFIG_KEY = "run_name"
 # Logging interval (T): Aggregate data into bins of this many steps
 LOGGING_INTERVAL_T = 10000
 
+# --- FIX 2 (Part A): Re-added SPECIAL_MAX_METRIC config ---
 # Special metric to calculate the max over the interval (as well as mean)
 SPECIAL_MAX_METRIC = "_episode/return"
 
@@ -63,9 +69,9 @@ SAMPLING_INTERVAL_CONFIG = [
         'interval': 1,
         'plots': [
             'observer/v(s)',
-            'observer/delta_bar',
+            'observer/abs_delta',
             'observer/delta',
-            'observer/v(s)',
+            'observer/td_error',
             'network/observer_w_norm'
         ]
     },
@@ -83,12 +89,11 @@ METRICS_TO_IGNORE = [
     'critic_prediction/*',
     'policy/*',
     'rewards/*',
-    'system/*',
+    'system*',
     'observer/norm1_eligibility_trace',
-    'observer/td_error',
     'observer/clipped_step_size',
     'observer/M',
-    'system*'
+    'observer/delta_bar',
 ]
 
 ## end of config
@@ -270,9 +275,17 @@ def main():
                 
                 all_seed_data[seed] = {}
                 for col in history_df.columns:
-                    # Ignore wandb system columns
-                    if col.startswith(('_', 'gradients/', 'parameters/')):
+                    
+                    # --- FIX 1: This is the main bug fix ---
+                    # We skip internal wandb metrics, but *allow* _episode/*
+                    if col.startswith('gradients/') or col.startswith('parameters/'):
                         continue
+                    if col.startswith('_') and not col.startswith('_episode/'):
+                        # This skips _runtime, _timestamp, etc.
+                        # but allows _episode/return, _episode/length
+                        continue
+                    # --- End of FIX 1 ---
+                    
                     
                     # Check against METRICS_TO_IGNORE with wildcard support
                     is_ignored = False
@@ -331,6 +344,13 @@ def main():
             # Declare custom step and make all metrics use it
             new_run.define_metric("_step", hidden=True) # declare the step metric
             new_run.define_metric("*", step_metric="_step") # use `_step` for all metrics
+
+            # --- MODIFICATION: Create log buffer ---
+            # We will add all data to this dict, keyed by step,
+            # and then log it all at the end in sorted order.
+            log_buffer = defaultdict(dict)
+            print("    Data will be buffered and logged at the end to ensure correct step order.")
+
 
             # --- 4.4.1: Process "Sampled" Metrics ---
             
@@ -391,7 +411,8 @@ def main():
 
                             if log_data:
                                 log_data["_step"] = int(log_step)
-                                new_run.log(log_data, step=int(log_step))
+                                # --- MODIFICATION: Buffer instead of logging ---
+                                log_buffer[int(log_step)].update(log_data)
 
                     # --- BLOCK 2: Process Sparse Metrics (FAST) ---
                     if sparse_metrics:
@@ -428,7 +449,8 @@ def main():
                             
                             if log_data:
                                 log_data["_step"] = int(log_step)
-                                new_run.log(log_data, step=int(log_step))
+                                # --- MODIFICATION: Buffer instead of logging ---
+                                log_buffer[int(log_step)].update(log_data)
 
                             
                 else:
@@ -468,7 +490,8 @@ def main():
                         # Log the aggregated data point for this bin
                         if log_data: # Only log if we have *any* data
                             log_data["_step"] = int(log_step)
-                            new_run.log(log_data, step=int(log_step))
+                            # --- MODIFICATION: Buffer instead of logging ---
+                            log_buffer[int(log_step)].update(log_data)
                 
                 # --- MODIFICATION END ---
             
@@ -477,72 +500,105 @@ def main():
             # This is Phase 2: We process all *remaining* metrics
             
             default_metrics = all_metrics_in_group - all_sampled_metrics
-            
             if not default_metrics:
                 print("    All metrics were sampled. No default processing needed.")
-                continue # This group is done
-
-            # Find max step for all *default* metrics
-            max_step_default = 0
-            for seed_data in all_seed_data.values():
-                for metric_name, metric_series in seed_data.items():
-                    if metric_name in default_metrics:
-                        max_step_default = max(max_step_default, metric_series.index.max())
-
-            if max_step_default == 0:
-                print("    No data found for default metrics.")
-                continue # This group is done
-
-            num_bins = math.ceil(max_step_default / LOGGING_INTERVAL_T)
+                # --- MODIFICATION: We still need to log the buffer! ---
+                # The 'continue' was moved to after the buffer log.
             
-            bin_pbar_default = tqdm(range(1, num_bins + 1), desc=f"    Processing {LOGGING_INTERVAL_T}-step bins", leave=False, unit="bin")
-            for i in bin_pbar_default:
-                end_step = i * LOGGING_INTERVAL_T
-                start_step = end_step - LOGGING_INTERVAL_T + 1
-                log_step = end_step
+            else: # Only run this block if there ARE default metrics
+                # Find max step for all *default* metrics
+                max_step_default = 0
+                for seed_data in all_seed_data.values():
+                    for metric_name, metric_series in seed_data.items():
+                        if metric_name in default_metrics:
+                            max_step_default = max(max_step_default, metric_series.index.max())
 
-                log_data = {} # Don't add _step yet
+                if max_step_default == 0:
+                    print("    No data found for default metrics.")
+                    # --- MODIFICATION: We still need to log the buffer! ---
+                    # The 'continue' was moved to after the buffer log.
 
-                for metric in default_metrics:
-                    # "Interval-average" logic
-                    seed_means = []
+                else: # Only run this if we have default data
+                    num_bins = math.ceil(max_step_default / LOGGING_INTERVAL_T)
                     
-                    # For special max metric
-                    all_values_in_bin = []
+                    bin_pbar_default = tqdm(range(1, num_bins + 1), desc=f"    Processing {LOGGING_INTERVAL_T}-step bins", leave=False, unit="bin")
+                    for i in bin_pbar_default:
+                        end_step = i * LOGGING_INTERVAL_T
+                        start_step = end_step - LOGGING_INTERVAL_T + 1
+                        log_step = end_step
 
-                    for seed_data in all_seed_data.values():
-                        if metric in seed_data:
-                            # Get all values in this bin
-                            bin_data = seed_data[metric][(seed_data[metric].index >= start_step) & (seed_data[metric].index <= end_step)]
-                            if not bin_data.empty:
-                                # Get the *mean* of the bin
-                                seed_means.append(bin_data.mean())
-                                if metric == SPECIAL_MAX_METRIC:
-                                    all_values_in_bin.extend(bin_data.values)
+                        log_data = {} # Don't add _step yet
 
-                    if seed_means:
-                        # If we found new data, log its mean and "remember" it
-                        mean_val = np.mean(seed_means)
-                        log_data[metric] = mean_val
-                        last_valid_values[metric] = mean_val
+                        for metric in default_metrics:
+                            # "Interval-average" logic
+                            seed_means = []
+                            
+                            # --- FIX 2 (Part B): Re-added logic for special max metric ---
+                            all_values_in_bin = []
+
+                            for seed_data in all_seed_data.values():
+                                if metric in seed_data:
+                                    # Get all values in this bin
+                                    bin_data = seed_data[metric][(seed_data[metric].index >= start_step) & (seed_data[metric].index <= end_step)]
+                                    if not bin_data.empty:
+                                        # Get the *mean* of the bin
+                                        seed_means.append(bin_data.mean())
+                                        # --- FIX 2 (Part C): Collect all values for max calc ---
+                                        if metric == SPECIAL_MAX_METRIC:
+                                            all_values_in_bin.extend(bin_data.values)
+
+                            if seed_means:
+                                # If we found new data, log its mean and "remember" it
+                                mean_val = np.mean(seed_means)
+                                log_data[metric] = mean_val
+                                last_valid_values[metric] = mean_val
+                                
+                                # --- FIX 2 (Part D): Calculate and log the max ---
+                                if metric == SPECIAL_MAX_METRIC and all_values_in_bin:
+                                    max_val = np.max(all_values_in_bin)
+                                    log_data[f"{metric}_max"] = max_val
+                                    last_valid_values[f"{metric}_max"] = max_val
+                            
+                            elif metric in METRICS_TO_FORWARD_FILL and metric in last_valid_values:
+                                # If bin is empty BUT we forward-fill, use the remembered value
+                                log_data[metric] = last_valid_values[metric]
+                                # --- FIX 2 (Part E): Forward-fill the max value too ---
+                                if metric == SPECIAL_MAX_METRIC and f"{metric}_max" in last_valid_values:
+                                    log_data[f"{metric}_max"] = last_valid_values[f"{metric}_max"]
+
+                        # Log the aggregated data point for this bin
+                        if log_data: # Only log if we have *any* data
+                            # *** X-AXIS FIX ***
+                            # Set both the custom _step and W&B's internal "Step"
+                            log_data["_step"] = int(log_step)
+                            # --- MODIFICATION: Buffer instead of logging ---
+                            log_buffer[int(log_step)].update(log_data)
+
+            # --- 4.5. Log All Buffered Data ---
+            print(f"\n    All data processing complete. Found {len(log_buffer)} unique steps to log.")
+            print("    Sorting and logging all buffered data to W&B...")
+            
+            if not log_buffer:
+                print("    No data to log for this group.")
+            else:
+                try:
+                    # Sort the buffer by the step (the dictionary key)
+                    sorted_steps = sorted(log_buffer.keys())
+                    
+                    log_pbar = tqdm(sorted_steps, desc="    Logging to W&B", leave=False, unit="step")
+                    for step in log_pbar:
+                        data_point = log_buffer[step]
                         
-                        if metric == SPECIAL_MAX_METRIC and all_values_in_bin:
-                            max_val = np.max(all_values_in_bin)
-                            log_data[f"{metric}_max"] = max_val
-                            last_valid_values[f"{metric}_max"] = max_val
-                    
-                    elif metric in METRICS_TO_FORWARD_FILL and metric in last_valid_values:
-                        # If bin is empty BUT we forward-fill, use the remembered value
-                        log_data[metric] = last_valid_values[metric]
-                        if metric == SPECIAL_MAX_METRIC and f"{metric}_max" in last_valid_values:
-                            log_data[f"{metric}_max"] = last_valid_values[f"{metric}_max"]
-
-                # Log the aggregated data point for this bin
-                if log_data: # Only log if we have *any* data
-                    # *** X-AXIS FIX ***
-                    # Set both the custom _step and W&B's internal "Step"
-                    log_data["_step"] = int(log_step)
-                    new_run.log(log_data, step=int(log_step))
+                        # The 'step' kwarg is what ensures monotonicity
+                        new_run.log(data_point, step=step)
+                        
+                    print(f"\n    Successfully logged {len(sorted_steps)} data points.")
+                
+                except Exception as e:
+                    print(f"\n    !!! ERROR during final sorted log: {e}")
+                    print("    Data for this group may be incomplete.")
+            
+            # --- End of Buffer Logging ---
 
         # Re-enable wandb.init messages for other scripts
         os.environ["WANDB_SILENT"] = "false"
