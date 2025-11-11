@@ -31,7 +31,7 @@ import time
 # --- 1. CONFIGURATION ---
 # (Fill these in)
 
-ENV = "Hopper" #  Ant  HalfCheetah  Hopper  Walker2d  Humanoid
+ENV = "Humanoid" #  Ant  HalfCheetah  Hopper  Walker2d  Humanoid
 
 # Your source project (the "heavy" one)
 SOURCE_PROJECT = f"spo_alpaca/StreamX_OptDesign_Observe_{ENV}-v5"

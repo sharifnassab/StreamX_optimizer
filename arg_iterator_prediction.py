@@ -3,7 +3,7 @@ from _slurm_generator import generate_slurm
 
 RESOURCE_DEFAULTS = {
     "account":  "def-sutton",
-    "max_time": "02:59:00",
+    "max_time": "04:00:00",
     "cpus":     1,
     "mem":     '2G',
     "gpus":    '0',   #  v100:1,  0
@@ -35,7 +35,7 @@ COMMON_ENV = {
     #
     "log_backend":      "wandb_offline",
     "log_dir":          "/home/asharif/scratch/StreamX_optimizer/WandB_offline", #"/home/asharif/StreamX_optimizer/WandB_offline",
-    "logging_level":    "light",      # "light" , "heavy"
+    "logging_level":    "heavy",      # "light" , "heavy"
     "project":          "StreamX_OptDesign_Observe",
 }
 
@@ -54,6 +54,12 @@ seeds = [i for i in range(30)]
 
 
 
+if 0: 
+    HYPER_SWEEPS.append({
+        "env_name":             environments,
+        "observer_optimizer":   ['monte_carlo'], #'ObGD_sq', 'ObGD_sq_plain'],# 'AdaptiveObGD', 'ObGD_sq', 'ObGD_sq_plain'],
+        "seed":                 [0],
+    })
 
 if 0: 
     HYPER_SWEEPS.append({
@@ -103,12 +109,6 @@ if 0:
     })
 
 
-if 1: 
-    HYPER_SWEEPS.append({
-        "env_name":             environments,
-        "observer_optimizer":   ['monte_carlo'], #'ObGD_sq', 'ObGD_sq_plain'],# 'AdaptiveObGD', 'ObGD_sq', 'ObGD_sq_plain'],
-        "seed":                 [0],
-    })
 
 
 

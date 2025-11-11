@@ -8,6 +8,7 @@ import torch.nn as nn
 import gymnasium as gym
 import torch.nn.functional as F
 from torch.distributions import Normal
+from functools import partial
 
 from optim import ObGD_sq as ObGDsq_Optimizer
 from optim import ObGD_sq_plain as ObGDsqPlain_Optimizer
@@ -17,9 +18,12 @@ from optim import Obn as Obn_Optimizer
 from optim import ObnC as ObnC_Optimizer
 from optim import ObnN as ObnN_Optimizer
 from optim import ObtC as ObtC_Optimizer
+from optim import ObtCm as ObtCm_Optimizer
 from optim import ObtN as ObtN_Optimizer
 from optim import Obt as Obt_Optimizer
 from optim import Obtnnz as Obtnnz_Optimizer
+from optim import ObGDN as ObGDN_Optimizer
+from optim import ObGDm as ObGDm_Optimizer
 from time_wrapper import AddTimeInfo
 from normalization_wrappers import NormalizeObservation, ScaleReward
 from sparse_init import sparse_init
@@ -28,19 +32,19 @@ from sparse_init import sparse_init
 from logger import get_logger
 print('All imports done. 2')  
 
-def initialize_weights(m):
+def initialize_weights(m, sparsity=0.9):
     if isinstance(m, nn.Linear):
-        sparse_init(m.weight, sparsity=0.9)
+        sparse_init(m.weight, sparsity=sparsity)
         m.bias.data.fill_(0.0)
 
 class Actor(nn.Module):
-    def __init__(self, n_obs=11, n_actions=3, hidden_depth=2, hidden_width=128):
+    def __init__(self, n_obs=11, n_actions=3, hidden_depth=2, hidden_width=128, initialization_sparsity=0.9):
         super(Actor, self).__init__()
         self.fc_layer   = nn.Linear(n_obs, hidden_width)
         self.hidden_layers = [nn.Linear(hidden_width, hidden_width) for _ in range(hidden_depth-1)]
         self.linear_mu = nn.Linear(hidden_width, n_actions)
         self.linear_std = nn.Linear(hidden_width, n_actions)
-        self.apply(initialize_weights)
+        self.apply(partial(initialize_weights, sparsity=initialization_sparsity))
 
     def forward(self, x):
         x = self.fc_layer(x)
@@ -56,12 +60,12 @@ class Actor(nn.Module):
         return mu, std
 
 class Critic(nn.Module):
-    def __init__(self, n_obs=11, hidden_depth=2, hidden_width=128):
+    def __init__(self, n_obs=11, hidden_depth=2, hidden_width=128, initialization_sparsity=0.9):
         super(Critic, self).__init__()
         self.fc_layer   = nn.Linear(n_obs, hidden_width)
         self.hidden_layers = [nn.Linear(hidden_width, hidden_width) for _ in range(hidden_depth-1)]
         self.linear_layer  = nn.Linear(hidden_width, 1)
-        self.apply(initialize_weights)
+        self.apply(partial(initialize_weights, sparsity=initialization_sparsity))
 
     def forward(self, x):
         x = self.fc_layer(x)
@@ -86,6 +90,7 @@ def spec_to_name(spec: dict) -> str:
                         'optimizer':    '',
                         'hidden_depth': '_net',
                         'hidden_width':  'x',
+                        'initialization_sparsity': 'sp',
                         'lamda':        '_lam',
                         'kappa':        'k',
                         'gamma':        'gam',
@@ -93,6 +98,7 @@ def spec_to_name(spec: dict) -> str:
                         'beta2':        'b2',
                         'u_trace':      'u',
                         'entropy_coeff':'ent',
+                        'momentum':     'm',
                         'lr':           'lr',
                         'weight_decay': 'wd',
                         'delta_trace':  'delTr',
@@ -135,10 +141,10 @@ class StreamAC(nn.Module):
             self.gamma_observer = float(self.observer_spec.get('gamma'))    
         
         # ---- Nets ----
-        self.policy_net = Actor(n_obs=n_obs, n_actions=n_actions, hidden_depth=self.policy_spec ['hidden_depth'], hidden_width=self.policy_spec ['hidden_width'])
-        self.critic_net = Critic(n_obs=n_obs, hidden_depth=self.critic_spec['hidden_depth'], hidden_width=self.critic_spec['hidden_width'])
+        self.policy_net = Actor(n_obs=n_obs, n_actions=n_actions, hidden_depth=self.policy_spec['hidden_depth'],    hidden_width=self.policy_spec['hidden_width'],   initialization_sparsity=self.policy_spec['initialization_sparsity'])
+        self.critic_net = Critic(n_obs=n_obs,                     hidden_depth=self.critic_spec['hidden_depth'],    hidden_width=self.critic_spec['hidden_width'],   initialization_sparsity=self.critic_spec['initialization_sparsity'])
         if self.observer_exists:
-            self.observer_net = Critic(n_obs=n_obs, hidden_depth=self.observer_spec['hidden_depth'], hidden_width=self.observer_spec['hidden_width'])
+            self.observer_net = Critic(n_obs=n_obs,               hidden_depth=self.observer_spec['hidden_depth'],  hidden_width=self.observer_spec['hidden_width'], initialization_sparsity=self.observer_spec['initialization_sparsity'])
 
         
         # ---- Optimizers (per-spec) ----
@@ -158,6 +164,7 @@ class StreamAC(nn.Module):
         lamda  = float(spec.get('lamda'))
         kappa  = float(spec.get('kappa'))
         weight_decay = float(spec.get('weight_decay', 0.0))
+        momentum = float(spec.get('momentum', 0.0))
 
         # Only for Obn / Obt
         u_trace = float(spec.get('u_trace', 0.01))
@@ -215,6 +222,20 @@ class StreamAC(nn.Module):
                 params, gamma=gamma, lamda=lamda, kappa=kappa,  weight_decay=weight_decay, delta_clip=delta_clip,  delta_norm=delta_norm,
                 u_trace=u_trace, entrywise_normalization=entrywise_normalization, beta2=beta2
             )
+        if opt_name == 'obgdn':
+            return ObGDN_Optimizer(
+                params, lr=lr, gamma=gamma, lamda=lamda, kappa=kappa, delta_clip=delta_clip,  delta_norm=delta_norm)
+        
+        if opt_name == 'obgdm':
+            return ObGDm_Optimizer(
+                params, lr=lr, gamma=gamma, lamda=lamda, kappa=kappa, momentum=momentum)
+        
+        if opt_name == 'obtcm':
+            return ObtCm_Optimizer(
+                params, gamma=gamma, lamda=lamda, kappa=kappa, weight_decay=weight_decay, sig_power=sig_power, momentum=momentum, 
+                entrywise_normalization=entrywise_normalization, beta2=beta2, in_trace_sample_scaling=in_trace_sample_scaling
+            )
+        
         
         raise ValueError(f"Unknown optimizer '{spec.get('optimizer')}' for role '{role}'.")
 
@@ -393,7 +414,7 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
 
     returns, term_time_steps = [], []
     s, _ = env.reset(seed=seed)
-    list_ep_R, list_ep_v, list_ep_S = [], {'critic':[], 'observer':[]}, []
+    list_ep_R, list_ep_v, list_ep_S, list_policy_delta_used = [], {'critic':[], 'observer':[]}, [], []
     ep_steps = 0
     ep_min_inv_M_sum = 0.0
     ep_policy_std = 0.0
@@ -414,6 +435,8 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
 
         for net in ['critic', 'observer']:
             list_ep_v[net].append(step_info[net].get('v(s)',0.0))
+        if 'delta_used' in step_info['policy']:
+            list_policy_delta_used.append(step_info['policy']['delta_used'])
 
         if (t % 500_000) <= 2025 and  logging_level in ['heavy']:
             expanded_step_info = {}
@@ -449,7 +472,7 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
             ep_len = info["episode"].get("l", ep_steps)
             # avg_min_inv_M = ep_min_inv_M_sum / max(ep_steps, 1) if ep_min_inv_M_sum > 0 else None
             avg_policy_std = ep_policy_std / max(ep_steps, 1) if ep_policy_std > 0 else None
-
+            
             log_payload = {
                 "_episode/return": float(ep_return),
                 "_episode/length": float(ep_len),
@@ -459,6 +482,13 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
                 #"critic_prediction/episode_abs":  float(ep_pred_error_critic['ep_abs_error']),
                 "critic_prediction/episode_RMSE": float(np.sqrt(ep_pred_error_critic['ep_MSE_error'])),
             }
+            if 'delta_used' in step_info['policy']:
+                avg_abs_delta_used = sum([abs(x) for x in list_policy_delta_used])/len(list_policy_delta_used)
+                avg_rms_delta_used = np.sqrt(sum([x**2 for x in list_policy_delta_used])/len(list_policy_delta_used))
+                log_payload.update({
+                    'policy/delta_used_avg_abs':avg_abs_delta_used,
+                    'policy/delta_used_rms':avg_rms_delta_used,
+                })
             if episode_number%40==0:
                 log_payload.update({
                     "network/policy_w_norm": compute_weight_norm(agent.policy_net),
@@ -497,7 +527,7 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
             ep_min_inv_M_sum = 0.0
             ep_policy_std = 0.0
             s, _ = env.reset()
-            list_ep_R, list_ep_v, list_ep_S = [], {'critic':[], 'observer':[]}, []
+            list_ep_R, list_ep_v, list_ep_S, list_policy_delta_used = [], {'critic':[], 'observer':[]}, [], []
             episode_number+=1
 
     print(f"total time = {time.gmtime(int(time.time() - start_time))}")
@@ -516,7 +546,7 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
 
 
 if __name__ == '__main__':
-    optimizer_choices = ['ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD', 'ObtC', 'ObtN', 'Obt', 'Obtnnz']
+    optimizer_choices = ['ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD', 'ObtC', 'ObtN', 'Obt', 'Obtnnz', 'ObGDN', 'ObGDm', 'ObtCm']
     parser = argparse.ArgumentParser(description='Stream AC(λ)')
     parser.add_argument('--env_name', type=str, default='Ant-v5')  # HalfCheetah-v4
     parser.add_argument('--seed', type=int, default=0)
@@ -525,11 +555,13 @@ if __name__ == '__main__':
 
     parser.add_argument('--policy_hidden_depth', type=int, default=2)
     parser.add_argument('--policy_hidden_width', type=int, default=128)
+    parser.add_argument('--policy_initialization_sparsity', type=float, default=0.9)  # larger is more sparse
     parser.add_argument('--policy_optimizer', type=str, default='ObGD', choices=optimizer_choices)
     parser.add_argument('--policy_kappa', type=float, default=3.0)
     parser.add_argument('--policy_gamma', type=float, default=0.99)
     parser.add_argument('--policy_lamda', type=float, default=0.0)
     parser.add_argument('--policy_lr', type=float, default=1.0)
+    parser.add_argument('--policy_momentum', type=float, default=0.0)
     parser.add_argument('--policy_entropy_coeff', type=float, default=0.01)  # was entropy_coeff
     parser.add_argument('--policy_u_trace', type=float, default=0.01)  # for Obn
     parser.add_argument('--policy_entrywise_normalization', type=str, default='RMSProp')  # 'none' or 'RMSProp'
@@ -543,11 +575,13 @@ if __name__ == '__main__':
     
     parser.add_argument('--critic_hidden_depth', type=int, default=2)
     parser.add_argument('--critic_hidden_width', type=int, default=128)
+    parser.add_argument('--critic_initialization_sparsity', type=float, default=0.9)  # larger is more sparse
     parser.add_argument('--critic_optimizer', type=str, default='ObnC', choices=optimizer_choices)
     parser.add_argument('--critic_kappa', type=float, default=2.0)
     parser.add_argument('--critic_gamma', type=float, default=0.99)
     parser.add_argument('--critic_lamda', type=float, default=0.0)
     parser.add_argument('--critic_lr', type=float, default=1.0)
+    parser.add_argument('--critic_momentum', type=float, default=0.0)
     parser.add_argument('--critic_u_trace', type=float, default=0.01)  # for Obn
     parser.add_argument('--critic_entrywise_normalization', type=str, default='RMSProp')  # 'none' or 'RMSProp'
     parser.add_argument('--critic_beta2', type=float, default=0.999)  # for Obn
@@ -560,11 +594,13 @@ if __name__ == '__main__':
 
     parser.add_argument('--observer_hidden_depth', type=int, default=2)
     parser.add_argument('--observer_hidden_width', type=int, default=128)
+    parser.add_argument('--observer_initialization_sparsity', type=float, default=0.9)  # larger is more sparse
     parser.add_argument('--observer_optimizer', type=str, default='none', choices=optimizer_choices+['none','monte_carlo'])
     parser.add_argument('--observer_kappa', type=float, default=2.0)
     parser.add_argument('--observer_gamma', type=float, default=0.99)
     parser.add_argument('--observer_lamda', type=float, default=0.0)
     parser.add_argument('--observer_lr', type=float, default=1.0)
+    parser.add_argument('--observer_momentum', type=float, default=0.0)
     parser.add_argument('--observer_u_trace', type=float, default=0.01)  # for Obn
     parser.add_argument('--observer_entrywise_normalization', type=str, default='RMSProp')  # 'none' or 'RMSProp'
     parser.add_argument('--observer_beta2', type=float, default=0.999)  # for Obn
@@ -588,7 +624,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # ---- Spec dicts ----
-    shared_params = ['optimizer', 'kappa', 'gamma', 'lamda', 'weight_decay', 'hidden_depth', 'hidden_width']
+    shared_params = ['optimizer', 'kappa', 'gamma', 'lamda', 'weight_decay', 'hidden_depth', 'hidden_width', 'initialization_sparsity']
     required_optimizer_params = {
         'none':         [],         # for observer
         'monte_carlo':  ['gamma'],  # for observer
@@ -600,9 +636,12 @@ if __name__ == '__main__':
         'ObnC':         shared_params + ['lr', 'entrywise_normalization', 'beta2', 'u_trace'],
         'ObnN':         shared_params + ['lr', 'entrywise_normalization', 'beta2', 'u_trace', 'delta_trace'],
         'ObtC':         shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling'],
+        'ObtCm':         shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'momentum'],
         'ObtN':         shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'delta_trace'],
         'Obt':          shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'delta_clip', 'delta_norm'],
         'Obtnnz':       shared_params + ['entrywise_normalization', 'beta2', 'u_trace', 'delta_clip', 'delta_norm'],
+        'ObGDN':        shared_params + ['lr', 'delta_clip', 'delta_norm'],
+        'ObGDm':        shared_params + ['lr', 'momentum'],
     }
 
     def build_spec(kind, args, required_optimizer_params) -> dict:
