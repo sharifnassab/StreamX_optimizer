@@ -24,8 +24,6 @@ from optim import Obt as Obt_Optimizer
 from optim import Obtnnz as Obtnnz_Optimizer
 from optim import ObGDN as ObGDN_Optimizer
 from optim import ObGDm as ObGDm_Optimizer
-from optim import Obtnnzm as Obtnnzm_Optimizer
-from optim import Obtm as Obtm_Optimizer
 from time_wrapper import AddTimeInfo
 from normalization_wrappers import NormalizeObservation, ScaleReward
 from sparse_init import sparse_init
@@ -224,13 +222,6 @@ class StreamAC(nn.Module):
                 params, gamma=gamma, lamda=lamda, kappa=kappa,  weight_decay=weight_decay, delta_clip=delta_clip,  delta_norm=delta_norm,
                 u_trace=u_trace, entrywise_normalization=entrywise_normalization, beta2=beta2
             )
-        
-        if opt_name == 'obtnnzm':
-            return Obtnnz_Optimizer(
-                params, gamma=gamma, lamda=lamda, kappa=kappa,  weight_decay=weight_decay, delta_clip=delta_clip,  delta_norm=delta_norm, momentum=momentum,
-                u_trace=u_trace, entrywise_normalization=entrywise_normalization, beta2=beta2
-            )
-
         if opt_name == 'obgdn':
             return ObGDN_Optimizer(
                 params, lr=lr, gamma=gamma, lamda=lamda, kappa=kappa, delta_clip=delta_clip,  delta_norm=delta_norm)
@@ -245,11 +236,6 @@ class StreamAC(nn.Module):
                 entrywise_normalization=entrywise_normalization, beta2=beta2, in_trace_sample_scaling=in_trace_sample_scaling
             )
         
-        if opt_name == 'obtm':
-            return Obtm_Optimizer(
-                params, gamma=gamma, lamda=lamda, kappa=kappa,  weight_decay=weight_decay, sig_power=sig_power, delta_clip=delta_clip,  delta_norm=delta_norm, momentum=momentum,
-                entrywise_normalization=entrywise_normalization, beta2=beta2, in_trace_sample_scaling=in_trace_sample_scaling
-            )
         
         raise ValueError(f"Unknown optimizer '{spec.get('optimizer')}' for role '{role}'.")
 
@@ -428,6 +414,9 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
 
     returns, term_time_steps = [], []
     s, _ = env.reset(seed=seed)
+    transitions = [['a', 'normalized_reward', 's_prime', 'terminated', 'truncated', 'actual_reward', 'episode_return_if_terminated'], # firs row is the keys
+                   [None, None, s, None, None, None]
+    ]
     list_ep_R, list_ep_v, list_ep_S, list_policy_delta_used = [], {'critic':[], 'observer':[]}, [], []
     ep_steps = 0
     ep_min_inv_M_sum = 0.0
@@ -440,6 +429,7 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
     for t in range(1, int(total_steps) + 1):
         a = agent.sample_action(s)
         s_prime, r, terminated, truncated, info = env.step(a)
+        transitions.append([a, r, s_prime, terminated, truncated, info['reward_immediate']])
 
         list_ep_R.append(r)
         list_ep_S.append(s)
@@ -534,6 +524,7 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
                 break
             
             returns.append(ep_return)
+            transitions[-1].append(ep_return)
             term_time_steps.append(t)
 
             # reset episode accumulators
@@ -554,13 +545,14 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
         with open(os.path.join(save_dir, "seed_{}.pkl".format(seed)), "wb") as f:
-            pickle.dump((returns, term_time_steps, env_name), f)
+            config_actor_critic = config
+            pickle.dump((transitions, env_name, config_actor_critic), f)
 
 
 
 
 if __name__ == '__main__':
-    optimizer_choices = ['ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD', 'ObtC', 'ObtN', 'Obt', 'Obtnnz', 'Obtnnzm', 'ObGDN', 'ObGDm', 'ObtCm', 'Obtm']
+    optimizer_choices = ['ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD', 'ObtC', 'ObtN', 'Obt', 'Obtnnz', 'ObGDN', 'ObGDm', 'ObtCm']
     parser = argparse.ArgumentParser(description='Stream AC(λ)')
     parser.add_argument('--env_name', type=str, default='Ant-v5')  # HalfCheetah-v4
     parser.add_argument('--seed', type=int, default=0)
@@ -650,15 +642,13 @@ if __name__ == '__main__':
         'ObnC':         shared_params + ['lr', 'entrywise_normalization', 'beta2', 'u_trace'],
         'ObnN':         shared_params + ['lr', 'entrywise_normalization', 'beta2', 'u_trace', 'delta_trace'],
         'ObtC':         shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling'],
-        'ObtCm':        shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'momentum'],
+        'ObtCm':         shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'momentum'],
         'ObtN':         shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'delta_trace'],
         'Obt':          shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'delta_clip', 'delta_norm'],
-        'Obtm':         shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'delta_clip', 'delta_norm', 'momentum'],
         'Obtnnz':       shared_params + ['entrywise_normalization', 'beta2', 'u_trace', 'delta_clip', 'delta_norm'],
-        'Obtnnzm':      shared_params + ['entrywise_normalization', 'beta2', 'u_trace', 'delta_clip', 'delta_norm', 'momentum'],
         'ObGDN':        shared_params + ['lr', 'delta_clip', 'delta_norm'],
         'ObGDm':        shared_params + ['lr', 'momentum'],
-        }
+    }
 
     def build_spec(kind, args, required_optimizer_params) -> dict:
         opt = getattr(args, f'{kind}_optimizer')

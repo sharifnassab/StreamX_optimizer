@@ -3,7 +3,7 @@ from _slurm_generator import generate_slurm
 
 RESOURCE_DEFAULTS = {
     "account":  "def-sutton",
-    "max_time": "08:00:00",
+    "max_time": "06:00:00",
     "cpus":     1,
     "mem":     '2G',
     "gpus":    '0',   #  v100:1,  0
@@ -143,7 +143,7 @@ if 0:   # critic network size
         "seed":                 seeds,
     })
 
-if 1:  # critic network sparse initialization
+if 0:  # critic network sparse initialization
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "critic_hidden_depth":  [2],
@@ -159,7 +159,7 @@ if 1:  # critic network sparse initialization
         "seed":                 seeds,
     })
 
-if 1:   # critic network sparse initialization
+if 0:   # critic network sparse initialization
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "critic_hidden_depth":  [2],
@@ -206,21 +206,23 @@ if 0:
 if 1:  # delta normalization for policy
     HYPER_SWEEPS.append({
         "env_name":             environments,
-        "policy_optimizer":     ['Obt'],
+        "policy_optimizer":     ['Obtm'],
         "policy_lamda":         [0.8],
         "policy_kappa":         [10, 20],
-        "policy_entrywise_normalization": ['RMSProp', 'none'],
+        "policy_momentum":      [0.9],
+        "policy_entrywise_normalization": ['none'],
         "policy_beta2":         [0.999],
         "policy_delta_clip":    ['10_avg_sq_max_10avg__dec_0.999801'],
-        "policy_delta_norm":    ['.9998clipSq'],
+        "policy_delta_norm":    ['.9998clipSq', '.9998clipAbs'],
         "policy_sig_power":     [2],
         "policy_in_trace_sample_scaling":['False'],
         "policy_entropy_coeff": [0.01],
         "policy_weight_decay":  [0.0],
-        "critic_optimizer":     ['ObtC'],
+        "critic_optimizer":     ['ObtCm'],
         "critic_lamda":         [0.8],
         "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
-        "critic_entrywise_normalization": ['RMSProp'],
+        "critic_momentum":      [0.9],
+        "critic_entrywise_normalization": ['RMSProp', 'none'],
         "critic_beta2":         [0.999],
         "critic_sig_power":     [2],
         "critic_in_trace_sample_scaling":['False'],
@@ -229,6 +231,33 @@ if 1:  # delta normalization for policy
 
 
 if 1:  # delta normalization for policy
+    HYPER_SWEEPS.append({
+        "env_name":             environments,
+        "policy_optimizer":     ['Obtm'],
+        "policy_lamda":         [0.8],
+        "policy_kappa":         [10, 20],
+        "policy_momentum":      [0.9],
+        "policy_entrywise_normalization": ['none'],
+        "policy_beta2":         [0.999],
+        "policy_delta_clip":    ['10_avg_sq_max_10avg__dec_0.999801'],
+        "policy_delta_norm":    ['.9998clipSq', '.9998clipAbs'],
+        "policy_sig_power":     [2],
+        "policy_in_trace_sample_scaling":['True'],
+        "policy_entropy_coeff": [0.01],
+        "policy_weight_decay":  [0.0],
+        "critic_optimizer":     ['ObtCm'],
+        "critic_lamda":         [0.8],
+        "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
+        "critic_momentum":      [0.9],
+        "critic_entrywise_normalization": ['RMSProp'],
+        "critic_beta2":         [0.999],
+        "critic_sig_power":     [2],
+        "critic_in_trace_sample_scaling":['False'],
+        "seed":                 seeds,
+    })
+
+
+if 0:  # delta normalization for policy
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['Obt'],
@@ -252,7 +281,7 @@ if 1:  # delta normalization for policy
         "seed":                 seeds,
     })
 
-if 1:  # delta normalization for policy
+if 0:  # delta normalization for policy
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['Obt'],
@@ -277,7 +306,7 @@ if 1:  # delta normalization for policy
     })
 
 
-if 1: # delta normalization for policy
+if 0: # delta normalization for policy
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['ObGDN'],
@@ -296,7 +325,7 @@ if 1: # delta normalization for policy
         "seed":                 seeds,
     })
 
-if 1:  # delta normalization for policy  (no eligibility trace)
+if 0:  # delta normalization for policy  (no eligibility trace)
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['Obt'],
@@ -325,16 +354,41 @@ if 0:
         "env_name":             environments,
         "policy_optimizer":     ['Obtnnz'],
         "policy_lamda":         [0.8],
-        "policy_kappa":         [20,30], # 20 was best most of the time
-        "policy_entrywise_normalization": ['RMSProp'],
+        "policy_kappa":         [20], # 20 was best most of the time
+        "policy_entrywise_normalization": ['none'],
         "policy_beta2":         [0.999],
         "policy_u_trace":       [0.01],
-        "policy_delta_clip":   ['1'],
-        "policy_delta_norm":   ['.9998clipSq'],
+        "policy_delta_clip":    ['10_avg_sq_max_10avg__dec_0.9998'],
+        "policy_delta_norm":    ['.9998clipSq'],
         "policy_entropy_coeff": [0.01],
-        "critic_optimizer":     ['ObtC'],
+        "critic_optimizer":     ['ObtCm'],
         "critic_lamda":         [0.8],
         "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
+        "critic_momentum":      [0.9],
+        "critic_entrywise_normalization": ['RMSProp'],
+        "critic_beta2":         [0.999],
+        "critic_sig_power":     [2],
+        "critic_in_trace_sample_scaling":['False'],
+        "seed":                 seeds,
+    })
+
+if 1: 
+    HYPER_SWEEPS.append({
+        "env_name":             environments,
+        "policy_optimizer":     ['Obtnnzm'],
+        "policy_lamda":         [0.8],
+        "policy_kappa":         [20], # 20 was best most of the time
+        "policy_entrywise_normalization": ['none'],
+        "policy_beta2":         [0.999],
+        "policy_u_trace":       [0.01],
+        "policy_momentum":      [0.9],
+        "policy_delta_clip":    ['10_avg_sq_max_10avg__dec_0.9998'],
+        "policy_delta_norm":    ['.9998clipSq', '.9998clipAbs'],
+        "policy_entropy_coeff": [0.01],
+        "critic_optimizer":     ['ObtCm'],
+        "critic_lamda":         [0.8],
+        "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
+        "critic_momentum":      [0.9],
         "critic_entrywise_normalization": ['RMSProp'],
         "critic_beta2":         [0.999],
         "critic_sig_power":     [2],
@@ -343,7 +397,7 @@ if 0:
     })
 
     
-if 1:   # momentum
+if 0:   # momentum
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "critic_hidden_depth":  [2],
@@ -365,7 +419,7 @@ if 1:   # momentum
         "seed":                 seeds,
     })
 
-if 1:   # momentum
+if 0:   # momentum
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "critic_hidden_depth":  [2],
@@ -386,7 +440,7 @@ if 1:   # momentum
         "seed":                 seeds,
     })
 
-if 1:   # momentum
+if 0:   # momentum
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "critic_hidden_depth":  [2],

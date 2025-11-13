@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 
 """
-W&B "Lite" Project Aggregator
+W&B "Lite" Project Aggregator (Multi-Environment & Multiprocessing)
 
-This script fetches runs from a "heavy" W&B project, aggregates them based on
-a grouping key, performs downsampling and aggregation (mean, std, max) over
-intervals, and logs the results to a new "lite" project.
+This script fetches runs from multiple "heavy" W&B environment-specific 
+projects, aggregates them based on a common "base" group name, performs 
+downsampling and aggregation, and logs the results to a single new 
+"lite" project.
 
-It is designed to be run incrementally, processing only groups that have
-been updated since the last run.
+It uses multiprocessing to process groups in parallel.
 """
 
 
@@ -19,56 +19,83 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 import sys
 from tqdm import tqdm
+import multiprocessing
 
 # --- 1. CONFIGURATION ---
-# (Fill these in)
 
-ENV = "Humanoid" #  Ant  HalfCheetah  Hopper  Walker2d  Humanoid
+# Number of parallel processes to use for processing groups
+NUM_PROCESSES = 5
 
-# Your source project (the "heavy" one)
-SOURCE_PROJECT = f"spo_alpaca/StreamX_OptDesign_policy_5m_{ENV}-v5"
+# List of environments to aggregate
+ENVS = ["Ant", "HalfCheetah", "Hopper", "Walker2d", "Humanoid"]
 
-# Your destination project (the "lite" one)
-DEST_PROJECT = "StreamX_OptDesign_policy_5m_lite"
+# Your source project template (the "heavy" one)
+SOURCE_PROJECT_TEMPLATE = "spo_alpaca/StreamX_OptDesign_policy_5m_{ENV}-v5"
 
-# Config key to group runs by (e.g., "exp_name", "run_name")
+# Your single destination project (the "lite" one)
+DEST_PROJECT = "StreamX_OptDesign_policy_5m_lite2"
+
+# Config key in source runs to group by (e.g., "run_name")
 GROUP_CONFIG_KEY = "run_name"
 
+# This is the prefix format to remove from the GROUP_CONFIG_KEY
+# (Using 5 underscores, which matched your logs)
+RUN_NAME_PREFIX_TEMPLATE = "{ENV}-v5____"
+
 # Logging interval (T): Aggregate data into bins of this many steps
-LOGGING_INTERVAL_T = 10000
+LOGGING_INTERVAL_T = 50_000
 
 # Special metric to calculate the max over the interval (as well as mean)
 SPECIAL_MAX_METRIC = "_episode/return"
 
 # Only process groups where at least one run has been updated
-# in the last X hours. Set to 0 to process all groups (that aren't
-# already up-to-date in the destination).
 PROCESS_LAST_X_HOURS = 24_000 
 
 # The config key in your *source* runs that holds the seed number
-# This is used to build the 'seeds_detail' string
 SOURCE_SEED_CONFIG_KEY = "seed"
 
+# Config keys to remove from the "lite" run's config
+CONFIG_KEYS_TO_REMOVE_FROM_LITE_RUN = [
+    SOURCE_SEED_CONFIG_KEY, 
+    "env", 
+    "env_name", 
+    "environment"
+]
 
 # Define metrics to forward-fill (to make them continuous).
-# Set to [] to disable all forward-filling (all plots will be sparse).
-# User requested "_episode/length" if any.
 METRICS_TO_FORWARD_FILL = ["_episode/length"]
 
 
 # --- 2. SETUP ---
-api = wandb.Api(timeout=19) # Increase timeout for large queries
+# (Global API removed, will be instantiated in main/workers)
 METRIC_KEYS_TO_SKIP = ["_step", "_runtime", "_timestamp"]
 
 # --- 3. HELPER FUNCTIONS ---
 
+def get_env_and_base_name(run_name, env_list):
+    """
+    Parses a run name (e.g., "Walker2d-v5_____-exp_1") to find the
+    environment and the base group name.
+    
+    Returns: (env_name, base_group_name)
+    """
+    for env in env_list:
+        prefix = RUN_NAME_PREFIX_TEMPLATE.format(ENV=env)
+        if run_name.startswith(prefix):
+            base_name = run_name[len(prefix):]
+            if base_name:
+                return env, base_name
+    
+    print(f"  - WARNING: Could not parse env prefix from run name '{run_name}'. "
+          f"Using full name as base group.", file=sys.stderr)
+    return None, run_name
+
+
 def parse_iso_timestamp(ts_string):
     """Converts W&B ISO timestamp string to a timezone-aware datetime object."""
     try:
-        # Handle the common case with fractional seconds
         return datetime.fromisoformat(ts_string.replace('Z', '+00:00'))
     except (ValueError, TypeError):
-        # Handle cases without fractional seconds or invalid types
         if isinstance(ts_string, str):
             return datetime.fromisoformat(ts_string)
         raise
@@ -76,234 +103,239 @@ def parse_iso_timestamp(ts_string):
 def get_run_update_time_as_datetime(run):
     """
     Robustly gets the last update time of a run as a datetime object.
-    Falls back from updated_at -> summary[_timestamp] -> created_at.
+    (Used only in main thread for dest_runs_cache)
     """
     try:
-        # 1. Try 'updated_at' attribute
         if run.updated_at:
             return parse_iso_timestamp(run.updated_at)
     except AttributeError:
-        pass # Attribute doesn't exist, try next method
-    
+        pass 
     try:
-        # 2. Try 'summary["_timestamp"]'
         if "_timestamp" in run.summary:
             ts_float = run.summary["_timestamp"]
             return datetime.fromtimestamp(ts_float, tz=timezone.utc)
     except Exception:
-        pass # Summary might be broken, try next method
-
+        pass 
     try:
-        # 3. Fallback to 'created_at'
         if run.created_at:
             print(f"  - WARNING: Could not find update time for run {run.name}. "
-                  f"Falling back to create time. This run may be processed unnecessarily.", file=sys.stderr)
+                  f"Falling back to create time.", file=sys.stderr)
             return parse_iso_timestamp(run.created_at)
     except AttributeError:
-        pass # This really shouldn't happen
-
-    # 4. If all else fails, return oldest possible time
+        pass 
     print(f"  - ERROR: Could not determine any timestamp for run {run.name}. "
-          "Skipping timestamp checks for this run.", file=sys.stderr)
+          "Skipping timestamp checks.", file=sys.stderr)
     return datetime.fromtimestamp(0, tz=timezone.utc)
 
 
-def main():
-    """Main aggregation logic."""
+def process_group(args):
+    """
+    This is the worker function that processes a single group.
+    It runs in a separate process.
+    """
+    # 1. Unpack arguments
+    (
+        base_group_name, 
+        env_runs_data_dict, 
+        dest_runs_cache_entry, 
+        time_threshold, 
+        group_index_tuple
+    ) = args
     
-    # --- 4.1. Get Destination Runs (for incremental checks) ---
-    print(f"Fetching existing 'lite' runs from {DEST_PROJECT} to check timestamps...")
-    dest_runs_cache = {} # {group_name: (update_datetime, run_id)}
-    try:
-        dest_runs = api.runs(DEST_PROJECT)
-        for run in dest_runs:
-            if GROUP_CONFIG_KEY in run.config:
-                group_name = run.config[GROUP_CONFIG_KEY]
-                run_time = get_run_update_time_as_datetime(run)
-                dest_runs_cache[group_name] = (run_time, run.id)
-    except Exception as e:
-        print(f"Warning: Could not fetch destination project. Will process all groups. Error: {e}", file=sys.stderr)
+    group_index, group_count = group_index_tuple
+    
+    # 2. Each worker needs its own wandb.Api instance
+    local_api = wandb.Api(timeout=19)
 
-    # --- 4.2. Get Source Runs and Group Them ---
-    print(f"Fetching all runs from {SOURCE_PROJECT}...")
-    try:
-        source_runs = api.runs(SOURCE_PROJECT)
-    except Exception as e:
-        print(f"FATAL: Could not fetch runs from {SOURCE_PROJECT}. Error: {e}", file=sys.stderr)
-        return
+    num_envs_in_group = len(env_runs_data_dict)
+    total_seeds_in_group = sum(len(runs) for runs in env_runs_data_dict.values())
+    
+    # Using print statements here is okay, but output might be interleaved.
+    print(f"\n--- Group {group_index}/{group_count}: {base_group_name} ({num_envs_in_group} envs, {total_seeds_in_group} total seeds) ---")
 
-    grouped_runs = defaultdict(list)
-    for run in source_runs:
-        if GROUP_CONFIG_KEY in run.config:
-            group_name = run.config[GROUP_CONFIG_KEY]
-            grouped_runs[group_name].append(run)
-        else:
-            print(f"Skipping run {run.name} - missing config key '{GROUP_CONFIG_KEY}'", file=sys.stderr)
-
-    print(f"Found {len(source_runs)} total runs, grouped into {len(grouped_runs)} groups.")
-
-    # Time threshold for 'PROCESS_LAST_X_HOURS'
-    time_threshold = datetime.now(timezone.utc) - timedelta(hours=PROCESS_LAST_X_HOURS)
-
-    # --- 4.3. Iterate Over Each Group ---
-    group_count = len(grouped_runs)
-    for i, (group_name, run_list) in enumerate(grouped_runs.items()):
-        
-        print(f"\n--- Group {i+1}/{group_count}: {group_name} ({len(run_list)} seeds) ---")
-
-        # --- 4.4. Incremental Processing Logic ---
-        
-        # 4.4.1. Check source run update times
+    # --- 4.4. Incremental Processing Logic ---
+    
+    # 4.4.1. Check source run update times
+    all_runs_in_group_data = [run_data for runs_list in env_runs_data_dict.values() for run_data in runs_list]
+    run_update_times = []
+    
+    # Re-implementing get_run_update_time_as_datetime logic from serializable data
+    for (run_path, run_config, updated_at, summary_ts, created_at) in all_runs_in_group_data:
         try:
-            run_update_times = [get_run_update_time_as_datetime(run) for run in run_list if run]
-            if not run_update_times:
-                print("  Skipping: No valid runs found for this group.")
+            if updated_at: # This safely handles None
+                run_update_times.append(parse_iso_timestamp(updated_at))
                 continue
-            latest_source_update = max(run_update_times)
+        except Exception: pass
+        try:
+            if summary_ts: # This safely handles None
+                run_update_times.append(datetime.fromtimestamp(summary_ts, tz=timezone.utc))
+                continue
+        except Exception: pass
+        try:
+            if created_at: # This safely handles None
+                print(f"  - WARNING: Falling back to create time for run {run_path}.", file=sys.stderr)
+                run_update_times.append(parse_iso_timestamp(created_at))
+                continue
+        except Exception: pass
+        run_update_times.append(datetime.fromtimestamp(0, tz=timezone.utc))
+
+    if not run_update_times:
+        print("  Skipping: No valid runs found for this group.")
+        return
+    latest_source_update = max(run_update_times)
+
+    # 4.4.2. Check against destination project
+    if dest_runs_cache_entry is not None:
+        dest_update_time, dest_run_id = dest_runs_cache_entry
+        
+        if dest_update_time >= latest_source_update:
+            print("  Skipping (Up-to-date): 'Lite' run is newer than all source runs.")
+            return
+        
+        if PROCESS_LAST_X_HOURS > 0 and latest_source_update < time_threshold:
+            print(f"  Skipping (Stale): All source runs are older than {PROCESS_LAST_X_HOURS} hours. Not re-processing.")
+            return
+            
+        print(f"  Processing (Outdated): 'Lite' run is older. Deleting old run {dest_run_id}...")
+        try:
+            old_run_to_delete = local_api.run(f"{DEST_PROJECT}/{dest_run_id}")
+            old_run_to_delete.delete()
+            print("  Old run deleted.")
         except Exception as e:
-            print(f"  ERROR checking source run times: {e}. Skipping group.")
-            continue
+            print(f"  WARNING: Could not delete old run {dest_run_id}. {e}")
+    
+    else:
+        print("  Processing (New): No 'lite' run found for this group.")
 
-        # 4.4.2. Check against destination project
-        if group_name in dest_runs_cache:
-            dest_update_time, dest_run_id = dest_runs_cache[group_name]
-            
-            # Check 1: Is it already up-to-date?
-            if dest_update_time >= latest_source_update:
-                print("  Skipping (Up-to-date): 'Lite' run is newer than all source runs.")
-                continue
-            
-            # Check 2: Is it too old to bother *re-processing*?
-            # This only applies if it's an *existing* run.
-            if PROCESS_LAST_X_HOURS > 0 and latest_source_update < time_threshold:
-                print(f"  Skipping (Stale): All source runs are older than {PROCESS_LAST_X_HOURS} hours. Not re-processing.")
-                continue
+    # --- 4.4.3. Fetch all data for the group ---
+    print("  Fetching data for all envs and seeds...")
+    
+    all_envs_data = {}
+    all_metric_keys_set = set()
+    processed_seed_details = {}
+    max_step = 0
+    
+    for env_name, run_data_list in env_runs_data_dict.items():
+        print(f"    Fetching for env: {env_name} ({len(run_data_list)} seeds)")
+        
+        all_seeds_data_for_this_env = []
+        all_metric_keys_for_this_env = set()
+        processed_seed_values_for_this_env = []
+
+        # This loop re-fetches the run object from its path
+        for j, (run_path, run_config, _, _, _) in enumerate(tqdm(run_data_list, desc=f"    {env_name} seeds", leave=False)):
+            try:
+                # *** RE-FETCH RUN OBJECT (now with string path) ***
+                run = local_api.run(run_path) 
                 
-            # If not skipped, it's outdated and needs processing
-            print(f"  Processing (Outdated): 'Lite' run is older. Deleting old run {dest_run_id}...")
-            try:
-                old_run_to_delete = api.run(f"{DEST_PROJECT}/{dest_run_id}")
-                old_run_to_delete.delete()
-                print("  Old run deleted.")
-            except Exception as e:
-                print(f"  WARNING: Could not delete old run {dest_run_id}. {e}")
-        
-        else:
-            # It's a new group. Always process it the first time.
-            print("  Processing (New): No 'lite' run found for this group.")
-
-        # --- 4.4.3. Fetch all data for the group ---
-        print("  Fetching data for all seeds...")
-        all_seeds_data = [] # List of DataFrames, one per seed
-        all_metric_keys = set()
-        processed_seed_values = [] # For the new 'seeds_detail' config
-        
-        for j, run in enumerate(tqdm(run_list, desc="  Fetching seed data", leave=False)):
-            try:
-                # We only need the history, not all files
                 history_df = run.history(pandas=True)
                 if history_df.empty:
-                    print(f"    - WARNING: No history for run {run.name} (seed {j+1}). Skipping seed.")
+                    print(f"    - WARNING: No history for run {run.name} (env {env_name}). Skipping seed.")
                     continue
                 
-                # Ensure _step is the index
                 if "_step" in history_df.columns:
                     history_df = history_df.set_index("_step").sort_index()
                 else:
                     print(f"    - WARNING: Run {run.name} is missing '_step' column. Skipping seed.")
                     continue
                 
-                all_metric_keys.update(history_df.columns)
-                all_seeds_data.append(history_df)
+                all_metric_keys_for_this_env.update(history_df.columns)
+                all_seeds_data_for_this_env.append(history_df)
                 
-                # Store the seed value from config for 'seeds_detail'
-                if SOURCE_SEED_CONFIG_KEY in run.config:
-                    processed_seed_values.append(str(run.config[SOURCE_SEED_CONFIG_KEY]))
+                if not history_df.empty:
+                    try:
+                        max_step = max(max_step, history_df.index.max())
+                    except TypeError:
+                        print(f"  WARNING: Non-numeric step index found in {run.name}.")
+
+                if SOURCE_SEED_CONFIG_KEY in run_config:
+                    processed_seed_values_for_this_env.append(str(run_config[SOURCE_SEED_CONFIG_KEY]))
                 else:
-                    # Fallback if key isn't present
-                    processed_seed_values.append(f"idx_{j}")
+                    processed_seed_values_for_this_env.append(f"idx_{j}")
                 
             except Exception as e:
-                print(f"    - FAILED to fetch history for run {run.name}. Error: {e}")
+                print(f"    - FAILED to fetch history for run {run_path}. Error: {e}")
         
-        if not all_seeds_data:
-            print("  No valid seed data found for this group. Skipping.")
-            continue
-            
-        print(f"  Fetched data for {len(all_seeds_data)}/{len(run_list)} seeds.")
-        
-        # Filter out keys we don't want to process
-        metric_keys_to_process = [k for k in all_metric_keys if k not in METRIC_KEYS_TO_SKIP]
-        
-        # Find the max step across all seeds
-        max_step = 0
-        for df in all_seeds_data:
-            if not df.empty:
-                try:
-                    max_step = max(max_step, df.index.max())
-                except TypeError: # Handle cases where index might be non-numeric
-                    print(f"  WARNING: Non-numeric step index found. Skipping dataframe.")
-        
-        if max_step == 0 or pd.isna(max_step):
-            print("  Max step is 0 or invalid. No data to process. Skipping.")
-            continue
+        if all_seeds_data_for_this_env:
+            all_envs_data[env_name] = all_seeds_data_for_this_env
+            all_metric_keys_set.update(all_metric_keys_for_this_env)
+            processed_seed_details[env_name] = "_".join(sorted(list(set(processed_seed_values_for_this_env))))
 
-        # --- 4.4.4. Bin, Aggregate, and Log to New Run ---
-        print(f"  Processing bins and logging to {DEST_PROJECT}...")
+    if not all_envs_data:
+        print("  No valid seed data found for this group. Skipping.")
+        return
         
-        # --- Create the new 'lite' config ---
-        base_config = run_list[0].config.copy()
-        
-        # Remove original seed key if it exists
-        if SOURCE_SEED_CONFIG_KEY in base_config:
-            del base_config[SOURCE_SEED_CONFIG_KEY]
-            
-        # Add new seed count and detail args
-        base_config['seeds'] = len(all_seeds_data) # Num successfully processed
-        base_config['seeds_detail'] = "_".join(sorted(list(set(processed_seed_values)))) # Use set for uniqueness
-        
-        with wandb.init(
-            project=DEST_PROJECT, 
-            name=group_name, 
-            config=base_config, 
-            settings=wandb.Settings(silent=True) # Suppress wandb logging
-        ) as new_run:
-            
-            # *** X-AXIS FIX ***
-            # Define _step as the default x-axis for ALL metrics
-            new_run.define_metric("_step", hidden=True)          # declare the step metric
-            new_run.define_metric("*", step_metric="_step")
-            
-            # Calculate total number of bins needed
-            num_bins = int(np.ceil(max_step / LOGGING_INTERVAL_T))
-            if num_bins == 0:
-                print("  No bins to process. Skipping.")
-                continue
+    print(f"  Fetched data for {len(all_envs_data)} environments.")
+    
+    #
+    # *** THIS IS THE CORRECTED LINE ***
+    # Filter out system metrics
+    #
+    metric_keys_to_process = [k for k in all_metric_keys_set if k not in METRIC_KEYS_TO_SKIP and not k.startswith("system/")]
 
-            # "Memory" for forward-fill
-            last_valid_values = {}
-            max_metric_name = f"{SPECIAL_MAX_METRIC}_max" # Helper variable
+    
+    if max_step == 0 or pd.isna(max_step):
+        print("  Max step is 0 or invalid. No data to process. Skipping.")
+        return
 
-            # Iterate through bins, where i is 1, 2, 3,...
-            for i in tqdm(range(1, num_bins + 1), desc="  Processing bins", leave=False):
-                # Bin i=1 -> end=T, start=1
-                # Bin i=2 -> end=2T, start=T+1
-                end_step = i * LOGGING_INTERVAL_T
-                start_step = end_step - LOGGING_INTERVAL_T + 1
+    # --- 4.4.4. Bin, Aggregate, and Log to New Run ---
+    print(f"  Processing bins and logging to {DEST_PROJECT}...")
+    
+    # --- Create the new 'lite' config ---
+    # Use config from the first run's data tuple
+    base_config = all_runs_in_group_data[0][1].copy() 
+    
+    keys_to_remove = set(CONFIG_KEYS_TO_REMOVE_FROM_LITE_RUN)
+    keys_to_remove.add(GROUP_CONFIG_KEY)
+    
+    for key in keys_to_remove:
+        if key in base_config:
+            del base_config[key]
+    
+    base_config[GROUP_CONFIG_KEY] = base_group_name
+        
+    for env, dfs in all_envs_data.items():
+        base_config[f'seeds_{env}'] = len(dfs)
+    
+    for env, detail_str in processed_seed_details.items():
+        base_config[f'seed_detail_{env}'] = detail_str
+        
+    base_config['environments'] = sorted(list(all_envs_data.keys()))
+    
+    with wandb.init(
+        project=DEST_PROJECT, 
+        name=base_group_name, 
+        config=base_config, 
+        settings=wandb.Settings(silent=True)
+    ) as new_run:
+        
+        new_run.define_metric("_step", hidden=True)
+        new_run.define_metric("*", step_metric="_step")
+        
+        num_bins = int(np.ceil(max_step / LOGGING_INTERVAL_T))
+        if num_bins == 0:
+            print("  No bins to process. Skipping.")
+            return
+
+        last_valid_values = {}
+        max_metric_name = f"{SPECIAL_MAX_METRIC}_max"
+
+        for i in tqdm(range(1, num_bins + 1), desc="  Processing bins", leave=False):
+            end_step = i * LOGGING_INTERVAL_T
+            start_step = end_step - LOGGING_INTERVAL_T + 1
+            log_step = end_step
+            
+            log_data = {"_step": log_step}
+            
+            for metric in metric_keys_to_process:
+                new_metric_section = metric.replace("/", "__")
                 
-                # Set the x-axis step value to i*T
-                log_step = end_step
-                
-                # Get all data points in this bin
-                log_data = {"_step": log_step}
-                
-                for metric in metric_keys_to_process:
-                    seed_means = [] # Store the mean for each seed
-                    all_points_in_bin = [] # For max calculation
+                for env_name, all_seeds_data in all_envs_data.items():
+                    seed_means = []
+                    all_points_in_bin = []
                     
                     for seed_df in all_seeds_data:
                         if metric in seed_df.columns:
-                            # Get data for this seed within the bin
                             bin_data = seed_df[
                                 (seed_df.index >= start_step) & 
                                 (seed_df.index <= end_step)
@@ -314,45 +346,130 @@ def main():
                                 if metric == SPECIAL_MAX_METRIC:
                                     all_points_in_bin.extend(bin_data.values)
                     
-                    # --- Handle Mean Value ---
-                    if seed_means:
-                        # Calculate, log, and "remember" the new value
-                        new_val = np.mean(seed_means)
-                        log_data[metric] = new_val
-                        last_valid_values[metric] = new_val
-                    elif metric in METRICS_TO_FORWARD_FILL and metric in last_valid_values:
-                        # No data, but it's a metric we should forward-fill
-                        log_data[metric] = last_valid_values[metric]
-                    # --- Else (no data, not in fill list) ---
-                    # Do nothing. The key is not added to log_data. This is the fix for policy_w_norm.
+                    new_metric_key = f"{new_metric_section}/{env_name}"
                     
-                    # --- Handle Max Value (only for the special metric) ---
+                    if seed_means:
+                        new_val = np.mean(seed_means)
+                        log_data[new_metric_key] = new_val
+                        last_valid_values[new_metric_key] = new_val
+                    elif metric in METRICS_TO_FORWARD_FILL and new_metric_key in last_valid_values:
+                        log_data[new_metric_key] = last_valid_values[new_metric_key]
+                    
                     if metric == SPECIAL_MAX_METRIC:
+                        max_metric_section = max_metric_name.replace("/", "__")
+                        new_max_metric_key = f"{max_metric_section}/{env_name}"
+                        
                         if all_points_in_bin:
-                            # Calculate, log, and "remember" the new max
                             new_max_val = np.max(all_points_in_bin)
-                            log_data[max_metric_name] = new_max_val
-                            last_valid_values[max_metric_name] = new_max_val
-                        elif max_metric_name in METRICS_TO_FORWARD_FILL and max_metric_name in last_valid_values:
-                            # Forward-fill if bin is empty
-                            log_data[max_metric_name] = last_valid_values[max_metric_name]
-                        # --- Else (no data, not in fill list) ---
-                        # Do nothing. The key is not added to log_data.
+                            log_data[new_max_metric_key] = new_max_val
+                            last_valid_values[new_max_metric_key] = new_max_val
+                        elif max_metric_name in METRICS_TO_FORWARD_FILL and new_max_metric_key in last_valid_values:
+                            log_data[new_max_metric_key] = last_valid_values[new_max_metric_key]
 
-                # Log the aggregated data point for this bin
-                # We log if we have *any* data (even just forward-filled data)
-                if len(log_data) > 1:
-                    log_data["_step"] = int(log_step)               # e.g., 10000, 20000, ...
-                    new_run.log(log_data, step=int(log_step)) 
-                #if len(log_data) > 1:
-                #    new_run.log(log_data)
+            if len(log_data) > 1:
+                log_data["_step"] = int(log_step)
+                new_run.log(log_data, step=int(log_step)) 
 
-        print("  Group processing complete.")
+    print(f"  Group processing complete for {base_group_name}.")
+
+
+def main():
+    """Main aggregation logic."""
+    
+    # Instantiate API in main process for setup
+    api = wandb.Api(timeout=19) 
+    
+    # --- 4.1. Get Destination Runs (for incremental checks) ---
+    print(f"Fetching existing 'lite' runs from {DEST_PROJECT} to check timestamps...")
+    dest_runs_cache = {} # {base_group_name: (update_datetime, run_id)}
+    try:
+        dest_runs = api.runs(DEST_PROJECT)
+        for run in dest_runs:
+            if GROUP_CONFIG_KEY in run.config:
+                base_group_name = run.config[GROUP_CONFIG_KEY]
+                run_time = get_run_update_time_as_datetime(run)
+                dest_runs_cache[base_group_name] = (run_time, run.id)
+    except Exception as e:
+        print(f"Warning: Could not fetch destination project. Will process all groups. Error: {e}", file=sys.stderr)
+
+    # --- 4.2. Get Source Runs and Group Them ---
+    print("Fetching all source runs from all environments...")
+    
+    # Store serializable data, not wandb.Run objects
+    all_source_runs_data = []
+    for env in ENVS:
+        project_name = SOURCE_PROJECT_TEMPLATE.format(ENV=env)
+        print(f"Fetching from {project_name}...")
+        try:
+            source_runs = api.runs(project_name)
+            for run in source_runs:
+                #
+                # *** THIS IS THE CORRECTED BLOCK ***
+                #
+                string_path = "/".join(run.path) # Convert list to "entity/project/run_id" string
+                
+                all_source_runs_data.append((
+                    string_path,                    # [0] <-- Now a STRING
+                    run.config,                     # [1]
+                    getattr(run, 'updated_at', None),  # [2]
+                    run.summary.get("_timestamp"),  # [3]
+                    getattr(run, 'created_at', None),  # [4]
+                    env                             # [5]
+                ))
+            print(f"  Found {len(source_runs)} runs.")
+        except Exception as e:
+            print(f"FATAL: Could not fetch runs from {project_name}. Error: {e}", file=sys.stderr)
+            # Continue to next env even if one fails
+            # return # Uncomment this to stop on failure
+    
+    print("\nGrouping all runs by base name...")
+    # grouped_runs_data = {base_group_name: {env_name: [run_data_tuple, ...]}}
+    grouped_runs_data = defaultdict(lambda: defaultdict(list))
+    
+    for (run_path, run_config, updated_at, summary_ts, created_at, project_env) in all_source_runs_data:
+        if GROUP_CONFIG_KEY not in run_config:
+            print(f"Skipping run {run_path} - missing config key '{GROUP_CONFIG_KEY}'", file=sys.stderr)
+            continue
+            
+        full_run_name = run_config[GROUP_CONFIG_KEY]
+        env_from_name, base_group_name = get_env_and_base_name(full_run_name, ENVS)
         
-        # Removed the 'api.cache.clear()' block
+        env_to_use = env_from_name if env_from_name else project_env
         
+        grouped_runs_data[base_group_name][env_to_use].append(
+            (run_path, run_config, updated_at, summary_ts, created_at)
+        )
+
+    print(f"Found {len(all_source_runs_data)} total runs, grouped into {len(grouped_runs_data)} base groups.")
+
+    time_threshold = datetime.now(timezone.utc) - timedelta(hours=PROCESS_LAST_X_HOURS)
+
+    # --- 4.3. Prepare arguments for the pool ---
+    all_args = []
+    group_count = len(grouped_runs_data)
+    for i, (base_group_name, env_runs_dict) in enumerate(grouped_runs_data.items()):
+        args_tuple = (
+            base_group_name,
+            env_runs_dict,
+            dest_runs_cache.get(base_group_name), # Pass the specific entry
+            time_threshold,
+            (i + 1, group_count) # For logging
+        )
+        all_args.append(args_tuple)
+
+    # --- 4.4. Run processing pool ---
+    print(f"\n--- Starting processing pool with {NUM_PROCESSES} workers ---")
+    
+    # Use imap_unordered for efficiency (process as they come)
+    # This acts as a dynamic "pull" queue, exactly as requested.
+    # We wrap it with tqdm for a master progress bar.
+    with multiprocessing.Pool(NUM_PROCESSES) as pool:
+        for _ in tqdm(pool.imap_unordered(process_group, all_args), total=len(all_args), desc="Processing Groups"):
+            pass # The work is done in the worker, just need to iterate
+
     print("\nAll groups processed.")
 
 # --- 5. RUN SCRIPT ---
 if __name__ == "__main__":
+    # This guard is ESSENTIAL for multiprocessing
     main()
