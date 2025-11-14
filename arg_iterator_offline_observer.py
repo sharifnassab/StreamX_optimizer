@@ -3,7 +3,7 @@ from _slurm_generator import generate_slurm
 
 RESOURCE_DEFAULTS = {
     "account":  "def-sutton",
-    "max_time": "00:09:00",
+    "max_time": "02:59:00",
     "cpus":     1,
     "mem":     '4G',
     "gpus":    '0',   #  v100:1,  0
@@ -39,7 +39,7 @@ run_description = 'test0'
 HYPER_SWEEPS = []
 
 environments = ['Ant', 'HalfCheetah', 'Hopper', 'Walker2d', 'Humanoid']
-seeds = [i for i in range(1,5)]
+seeds = [i for i in range(5)]
 
 
 
@@ -47,7 +47,7 @@ for env_name in environments:
     dataset_path = f"/home/asharif/scratch/StreamX_optimizer/offline_datasets/ObGD_ObGD_lam_0.8/seed0/{env_name}"
     dataset_name = 'ObGD_ObGD_lam_0.8__seed0'
 
-    if 1: 
+    if 0: 
         HYPER_SWEEPS.append({
             "env_name":             [env_name],
             "dataset_name":         [dataset_name],
@@ -56,7 +56,7 @@ for env_name in environments:
             "seed":                 seeds,
         })
 
-    if 0: 
+    if 1: 
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
             "dataset_name":           [dataset_name],
@@ -72,7 +72,7 @@ for env_name in environments:
             "observer_lamda":         [0.8], 
         })
     
-    if 0: 
+    if 1: 
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
             "dataset_name":           [dataset_name],
@@ -93,7 +93,7 @@ for env_name in environments:
         })
 
     
-    if 0: 
+    if 1: 
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
             "dataset_name":           [dataset_name],
