@@ -137,6 +137,8 @@ def save_dataset_bin_npz(
     """
     Save one bin of data as a compressed NumPy .npz file in float32/bool.
     """
+    env_short = env_name.split('-')[0]
+    save_dir = os.path.join(save_dir, f'seed{seed}', f'{env_short}')
     if save_dir == 'none':
         print("save_dir is 'none', skipping save.")
         return
@@ -148,8 +150,7 @@ def save_dataset_bin_npz(
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
 
-        env_short = env_name.split('-')[0]
-        filename = f"{env_short}_seed{seed}_bin{bin_index:05d}.npz"
+        filename = f"bin{bin_index:05d}.npz"
         save_path = os.path.join(save_dir, filename)
 
         # Convert to compact dtypes
@@ -571,13 +572,9 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--total_steps', type=int, default=100_000)
     parser.add_argument('--max_time', type=str, default='1000:00:00')
-    parser.add_argument('--save_dir', type=str, default='none',
-                        help='/Users/arsalan/Desktop/Codes/StreamX/offline_dataset/ObGD_ObGD_lam_0.8/')
+    parser.add_argument('--save_dir', type=str, default='none', help='/Users/arsalan/Desktop/Codes/StreamX/offline_dataset/ObGD_ObGD_lam_0.8/')
     parser.add_argument('--run_name', type=str, default='', help='Suffix for run name and save file name.')
-
-    # NEW: bin_length argument
-    parser.add_argument('--bin_length', type=int, default=30_000,
-                        help='Number of transitions per saved dataset bin.')
+    parser.add_argument('--bin_length', type=int, default=30_000,help='Number of transitions per saved dataset bin.')
 
     # --- Policy Arguments ---
     parser.add_argument('--policy_hidden_depth', type=int, default=2)
@@ -678,3 +675,4 @@ if __name__ == '__main__':
         run_name_suffix=args.run_name,
         bin_length=args.bin_length,
     )
+

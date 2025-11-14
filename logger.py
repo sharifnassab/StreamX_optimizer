@@ -1,5 +1,5 @@
 # logger.py
-import os
+import os, torch
 from typing import Dict, Optional
 
 class _NullLogger:
@@ -52,7 +52,8 @@ class _WandbLogger:
         self.wandb.finish()
     def watch(self, models, **kwargs):
         try:
-            self.wandb.watch(models, **kwargs)
+            #self.wandb.watch(models, **kwargs)
+            pass
         except Exception:
             pass
 
@@ -98,7 +99,8 @@ class _WandbLogger_offline:
 
     def watch(self, models, **kwargs):
         try:
-            self.wandb.watch(models, **kwargs)
+            pass
+            # self.wandb.watch(models, **kwargs)
         except Exception:
             pass
 
