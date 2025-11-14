@@ -45,16 +45,22 @@ seeds = [i for i in range(1)]
 
 for env_name in environments:
     dataset_path = f"/home/asharif/scratch/StreamX_optimizer/offline_datasets/ObGD_ObGD_lam_0.8/seed0/{env_name}"
+    dataset_name = 'ObGD_ObGD_lam_0.8__seed0'
+
     if 1: 
         HYPER_SWEEPS.append({
-            "dataset_path":          [dataset_path],
+            "env_name":             [env_name],
+            "dataset_name":         [dataset_name],
+            "dataset_path":         [dataset_path],
             "observer_optimizer":   ['monte_carlo'], #'ObGD_sq', 'ObGD_sq_plain'],# 'AdaptiveObGD', 'ObGD_sq', 'ObGD_sq_plain'],
             "seed":                 seeds,
         })
 
     if 0: 
         HYPER_SWEEPS.append({
-            "dataset_path":            [dataset_path],
+            "env_name":               [env_name],
+            "dataset_name":           [dataset_name],
+            "dataset_path":           [dataset_path],
             #
             "observer_hidden_depth":  [2],
             "observer_hidden_width":  [128],
@@ -69,7 +75,8 @@ for env_name in environments:
     if 0: 
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
-            "dataset_path":            [dataset_path],
+            "dataset_name":           [dataset_name],
+            "dataset_path":           [dataset_path],
             #
             "observer_hidden_depth":  [2],
             "observer_hidden_width":  [128],
@@ -89,7 +96,8 @@ for env_name in environments:
     if 0: 
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
-            "dataset_path":            [dataset_path],
+            "dataset_name":           [dataset_name],
+            "dataset_path":           [dataset_path],
             #
             "observer_hidden_depth":  [2],
             "observer_hidden_width":  [128],

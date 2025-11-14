@@ -467,14 +467,16 @@ def main(dataset_path, total_steps, seed, observer_spec, logging_spec, debug=Fal
 
     log_freq = int(logging_spec.get('log_freq', 20_000))
     bin_size = int(logging_spec.get('bin_size', 50_000))
+    dataset_name = logging_spec.get('dataset_name') + f'__seed{seed}'
+
     if log_freq <= 0:
         print("Warning: log_freq <= 0 detected. Group 2 step-level logging will be disabled.")
     if bin_size <= 0:
         print("Warning: bin_size <= 0 detected. Group 1 binning may behave unexpectedly.")
 
-    dataset_name = os.path.basename(os.path.normpath(dataset_path)) + f'__seed{seed}'
     run_name = (f'{env_name}____dataset_{dataset_name}____-Observer_{spec_to_name(observer_spec)}' +
                 (f"____{logging_spec.get('run_name', '')}" if (logging_spec.get('run_name', '') != '') else ''))
+
 
     config = {
         "env_name": env_name,
@@ -720,7 +722,7 @@ def main(dataset_path, total_steps, seed, observer_spec, logging_spec, debug=Fal
     print("Finishing wandb run (this may take a moment)...")
     logger.finish()
     print("--- Wandb logging finished and sync complete ---")
-
+    
 
     if logging_spec['dir_pickle'] != 'none':
         save_dir = os.path.join(logging_spec['dir_pickle'], dataset_name,  run_name)
@@ -744,6 +746,7 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=0, help='Seed for the observer network initialization.')
     parser.add_argument('--total_steps', type=int, default=5_000_000, help='Total number of steps to train the observer.')
     parser.add_argument('--max_time', type=str, default="", help='Not effective in this code.')
+    parser.add_argument('--env_name', type=str, default='Ant')  # Only affects saving firectory
     
     # Observer Arguments
     parser.add_argument('--observer_hidden_depth', type=int, default=2)
@@ -775,6 +778,7 @@ if __name__ == '__main__':
     parser.add_argument('--log_freq', type=int, default=20_000, help='Frequency for logging Group 2 plots.')
     parser.add_argument('--bin_size', type=int, default=50_000, help='Bin size for averaging Group 1 plots.')
     parser.add_argument('--uID', type=str, default='', help='')  # not used
+    parser.add_argument('--dataset_name', type=str, default='', help='Name of the dataset for logging purposes (pickle save).')
 
     args = parser.parse_args()
 
@@ -813,11 +817,12 @@ if __name__ == '__main__':
     logging_spec = {
         'backend': args.log_backend,
         'dir_pickle': args.log_dir_for_pickle,
-        'dir': f'{args.log_dir}_{args.env_name + ('' if args.env_name.endswith("v5") else "-v5")}', # if env_name ends with 'v5', do not add extra '-v5'
+        'dir': f'{args.log_dir}_{args.env_name + ("" if args.env_name.endswith("v5") else "-v5")}', # if env_name ends with 'v5', do not add extra '-v5'
         'project': args.project,
         'run_name': args.run_name,
         'log_freq': args.log_freq,
         'bin_size': args.bin_size,
+        'dataset_name': args.dataset_name,
     }
 
     main(dataset_path=args.dataset_path, total_steps=args.total_steps, seed=args.seed, observer_spec=observer_spec, logging_spec=logging_spec, debug=args.debug)
