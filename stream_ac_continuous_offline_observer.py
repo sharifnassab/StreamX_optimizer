@@ -813,7 +813,7 @@ if __name__ == '__main__':
     logging_spec = {
         'backend': args.log_backend,
         'dir_pickle': args.log_dir_for_pickle,
-        'dir': args.log_dir,
+        'dir': f'{args.log_dir}_{args.env_name + ('' if args.env_name.endswith("v5") else "-v5")}', # if env_name ends with 'v5', do not add extra '-v5'
         'project': args.project,
         'run_name': args.run_name,
         'log_freq': args.log_freq,
