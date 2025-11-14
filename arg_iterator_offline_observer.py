@@ -3,7 +3,7 @@ from _slurm_generator import generate_slurm
 
 RESOURCE_DEFAULTS = {
     "account":  "def-sutton",
-    "max_time": "04:00:00",
+    "max_time": "02:59:00",
     "cpus":     1,
     "mem":     '4G',
     "gpus":    '0',   #  v100:1,  0
@@ -18,25 +18,13 @@ PYTHON_ENTRYPOINT = "stream_ac_continuous_offline_observer.py"
 
 COMMON_ENV = {
     #"env_name":         "Ant-v5",
-    "total_steps":      2_000_000,
-    #
-    "policy_optimizer": 'ObGD',
-    "policy_kappa":     3.0,
-    "policy_gamma":     0.99,
-    "policy_lamda":     0.0,
-    "policy_lr":        1.0,
-    "policy_entropy_coeff": 0.01,
-    #
-    "critic_optimizer": 'ObGD_sq',
-    "critic_kappa":     2.0,
-    "critic_gamma":     0.99,
-    "critic_lamda":     0.0,
-    "critic_lr":        1.0,
+    "total_steps":      5_000_000,
     #
     "log_backend":      "wandb_offline",
-    "log_dir":          "/home/asharif/scratch/StreamX_optimizer/WandB_offline", #"/home/asharif/StreamX_optimizer/WandB_offline",
-    "logging_level":    "heavy",      # "light" , "heavy"
-    "project":          "StreamX_OptDesign_Observe",
+    "log_dir":          "/home/asharif/scratch/StreamX_optimizer/WandB_offline", 
+    "project":          "StreamX_Offline_Observer",
+    "log_freq":         400_000,
+    "bin_size":         50_000,
 }
 
 
@@ -50,63 +38,74 @@ run_description = 'test0'
 HYPER_SWEEPS = []
 
 environments = ['Ant-v5', 'HalfCheetah-v5', 'Hopper-v5', 'Walker2d-v5', 'Humanoid-v5']
-seeds = [i for i in range(30)]
+seeds = [i for i in range(1)]
 
 
 
-if 0: 
-    HYPER_SWEEPS.append({
-        "env_name":             environments,
-        "observer_optimizer":   ['monte_carlo'], #'ObGD_sq', 'ObGD_sq_plain'],# 'AdaptiveObGD', 'ObGD_sq', 'ObGD_sq_plain'],
-        "seed":                 [0],
-    })
+for env_name in environments:
+    dataset_dir = f"/home/asharif/scratch/StreamX_optimizer/offline_datasets/ObGD_ObGD_lam_0.8/seed0/{env_name}"
+    if 1: 
+        HYPER_SWEEPS.append({
+            "env_name":             [env_name],
+            "dataset_dir":          [dataset_dir],
+            "observer_optimizer":   ['monte_carlo'], #'ObGD_sq', 'ObGD_sq_plain'],# 'AdaptiveObGD', 'ObGD_sq', 'ObGD_sq_plain'],
+            "seed":                 seeds,
+        })
 
-if 0: 
-    HYPER_SWEEPS.append({
-        "env_name":             environments,
-        "observer_optimizer":     ['ObGD'],#, 'ObGD_sq', 'ObGD_sq_plain'],# 'AdaptiveObGD', 'ObGD_sq', 'ObGD_sq_plain'],
-        "observer_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
-        "observer_lamda":         [0.8], 
-        "seed":                 seeds,
-    })
+    if 0: 
+        HYPER_SWEEPS.append({
+            "env_name":               [env_name],
+            "dataset_dir":            [dataset_dir],
+            #
+            "observer_hidden_depth":  [2],
+            "observer_hidden_width":  [128],
+            "observer_initialization_sparsity": [0.9],
+            "seed":                   seeds,
+            #
+            "observer_optimizer":     ['ObGD'],
+            "observer_kappa":         [2.0],
+            "observer_lamda":         [0.8], 
+        })
+    
+    if 0: 
+        HYPER_SWEEPS.append({
+            "env_name":               [env_name],
+            "dataset_dir":            [dataset_dir],
+            #
+            "observer_hidden_depth":  [2],
+            "observer_hidden_width":  [128],
+            "observer_initialization_sparsity": [0.9],
+            "seed":                   seeds,
+            #
+            "observer_optimizer":     ['ObtC'],
+            "observer_lamda":         [0.8], 
+            "observer_kappa":         [2.0], 
+            "observer_entrywise_normalization": ['RMSProp', 'none'],
+            "observer_beta2":         [0.999],
+            "observer_sig_power":     [2],
+            "observer_in_trace_sample_scaling":['False'],
+        })
 
-if 0: 
-    HYPER_SWEEPS.append({
-        "env_name":             environments,
-        "observer_optimizer":     ['Obn', 'ObnC'],
-        "observer_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
-        "observer_entrywise_normalization": ['RMSProp', 'none'],
-        "observer_beta2":         [0.999],
-        "observer_u_trace":       [0.01, .999],
-        "seed":                 seeds,
-    })
-
-
-if 0: 
-    HYPER_SWEEPS.append({
-        "env_name":             environments,
-        "observer_optimizer":     ['ObtC'],
-        "observer_lamda":         [0.8], 
-        "observer_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
-        "observer_entrywise_normalization": ['RMSProp'],
-        "observer_beta2":         [0.999],
-        "observer_sig_power":     [2],
-        "observer_in_trace_sample_scaling":['False', 'True'],
-        "seed":                 seeds,
-    })
-
-if 0: 
-    HYPER_SWEEPS.append({
-        "env_name":             environments,
-        "observer_optimizer":     ['ObtC'],
-        "observer_lamda":         [0.8], 
-        "observer_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
-        "observer_entrywise_normalization": ['RMSProp'],
-        "observer_beta2":         [0.999],
-        "observer_sig_power":     [1],
-        "observer_in_trace_sample_scaling":['False'],
-        "seed":                 seeds,
-    })
+    
+    if 0: 
+        HYPER_SWEEPS.append({
+            "env_name":               [env_name],
+            "dataset_dir":            [dataset_dir],
+            #
+            "observer_hidden_depth":  [2],
+            "observer_hidden_width":  [128],
+            "observer_initialization_sparsity": [0.9],
+            "seed":                   seeds,
+            #
+            "observer_optimizer":     ['ObtCm'],
+            "observer_lamda":         [0.8], 
+            "observer_kappa":         [2.0], 
+            "observer_momentum":      [0.9], 
+            "observer_entrywise_normalization": ['RMSProp', 'none'],
+            "observer_beta2":         [0.999],
+            "observer_sig_power":     [2],
+            "observer_in_trace_sample_scaling":['False'],
+        })
 
 
 

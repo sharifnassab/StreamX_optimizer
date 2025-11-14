@@ -433,7 +433,7 @@ def load_offline_dataset(dataset_path: str):
     return ds
 
 
-def main(dataset_path, seed, observer_spec, logging_spec, debug=False):
+def main(dataset_path, total_steps, seed, observer_spec, logging_spec, debug=False):
     torch.manual_seed(seed)
     np.random.seed(seed)
 
@@ -472,7 +472,8 @@ def main(dataset_path, seed, observer_spec, logging_spec, debug=False):
     if bin_size <= 0:
         print("Warning: bin_size <= 0 detected. Group 1 binning may behave unexpectedly.")
 
-    run_name = (f'{env_name}____-Observer_{spec_to_name(observer_spec)}' +
+    dataset_name = os.path.basename(os.path.normpath(dataset_path)) + f'__seed{seed}'
+    run_name = (f'{env_name}____dataset_{dataset_name}____-Observer_{spec_to_name(observer_spec)}' +
                 (f"____{logging_spec.get('run_name', '')}" if (logging_spec.get('run_name', '') != '') else ''))
 
     config = {
@@ -480,6 +481,7 @@ def main(dataset_path, seed, observer_spec, logging_spec, debug=False):
         "observer_init_seed": seed,
         "data_seed": data_seed,
         "data_dataset_path": dataset_path,
+        "dataset_name": dataset_name,
         "observer": observer_spec,
         "run_name": run_name,
         "log_freq": log_freq,
@@ -529,7 +531,7 @@ def main(dataset_path, seed, observer_spec, logging_spec, debug=False):
     print(f"Starting observer training on {total_steps} transitions...")
 
     t = -1  # global step index
-    while True:
+    while t<total_steps:
         t += 1
         try:
             s, a, r_scaled, r_actual, s_prime, done = dataset.step()
@@ -719,6 +721,15 @@ def main(dataset_path, seed, observer_spec, logging_spec, debug=False):
     logger.finish()
     print("--- Wandb logging finished and sync complete ---")
 
+
+    if logging_spec['dir_pickle'] != 'none':
+        save_dir = os.path.join(logging_spec['dir_pickle'], dataset_name,  run_name)
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+        with open(os.path.join(save_dir, "seed_{}.pkl".format(seed)), "wb") as f:
+            pickle.dump((merged_by_step, sorted_steps, env_name), f)
+
+
 if __name__ == '__main__':
     optimizer_choices = [
         'ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN',
@@ -731,7 +742,7 @@ if __name__ == '__main__':
     # Core Arguments
     parser.add_argument('--dataset_path', type=str, default='/Users/arsalan/Desktop/Codes/StreamX/offline_dataset/ObGD_ObGD_lam_0.8__', help='Path to the offline dataset .pkl file to load.')
     parser.add_argument('--seed', type=int, default=0, help='Seed for the observer network initialization.')
-
+    parser.add_argument('--total_steps', type=int, default=5_000_000, help='Total number of steps to train the observer.')
     # Observer Arguments
     parser.add_argument('--observer_hidden_depth', type=int, default=2)
     parser.add_argument('--observer_hidden_width', type=int, default=128)
@@ -755,6 +766,7 @@ if __name__ == '__main__':
     # Logging Arguments
     parser.add_argument('--log_backend', type=str, default='wandb', choices=['none', 'tensorboard', 'wandb', 'wandb_offline'])
     parser.add_argument('--log_dir', type=str, default='./wandb_offline', help='WandB offline log dir (if backend=wandb_offline)')
+    parser.add_argument('--log_dir_for_pickle', type=str, default='none', help='/home/asharif/StreamX_optimizer/pickle')
     parser.add_argument('--project', type=str, default='StreamX_Offline_Observer', help='WandB project')
     parser.add_argument('--run_name', type=str, default='', help='Run name for logger')
     parser.add_argument('--debug', action='store_true')
@@ -798,6 +810,7 @@ if __name__ == '__main__':
 
     logging_spec = {
         'backend': args.log_backend,
+        'dir_pickle': args.log_dir_for_pickle,
         'dir': args.log_dir,
         'project': args.project,
         'run_name': args.run_name,
@@ -805,4 +818,4 @@ if __name__ == '__main__':
         'bin_size': args.bin_size,
     }
 
-    main(dataset_path=args.dataset_path, seed=args.seed, observer_spec=observer_spec, logging_spec=logging_spec, debug=args.debug)
+    main(dataset_path=args.dataset_path, total_steps=args.total_steps, seed=args.seed, observer_spec=observer_spec, logging_spec=logging_spec, debug=args.debug)
