@@ -467,7 +467,7 @@ def main(dataset_path, total_steps, seed, observer_spec, logging_spec, debug=Fal
 
     log_freq = int(logging_spec.get('log_freq', 20_000))
     bin_size = int(logging_spec.get('bin_size', 50_000))
-    dataset_name = logging_spec.get('dataset_name') + f'__seed{seed}'
+    dataset_name = logging_spec.get('dataset_name')
 
     if log_freq <= 0:
         print("Warning: log_freq <= 0 detected. Group 2 step-level logging will be disabled.")
