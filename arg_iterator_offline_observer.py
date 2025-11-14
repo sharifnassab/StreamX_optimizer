@@ -39,7 +39,7 @@ run_description = 'test0'
 HYPER_SWEEPS = []
 
 environments = ['Ant', 'HalfCheetah', 'Hopper', 'Walker2d', 'Humanoid']
-seeds = [i for i in range(1)]
+seeds = [i for i in range(1,5)]
 
 
 
