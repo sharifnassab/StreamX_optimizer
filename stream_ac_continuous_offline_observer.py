@@ -760,6 +760,7 @@ if __name__ == '__main__':
     parser.add_argument('--debug', action='store_true')
     parser.add_argument('--log_freq', type=int, default=20_000, help='Frequency for logging Group 2 plots.')
     parser.add_argument('--bin_size', type=int, default=50_000, help='Bin size for averaging Group 1 plots.')
+    parser.add_argument('--uID', type=str, default='', help='')  # not used
 
     args = parser.parse_args()
 

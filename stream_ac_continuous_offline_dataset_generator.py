@@ -618,6 +618,7 @@ if __name__ == '__main__':
     parser.add_argument('--critic_sig_power', type=float, default=2)
     parser.add_argument('--critic_delta_clip', type=str, default='none')
     parser.add_argument('--critic_delta_norm', type=str, default='none')
+    parser.add_argument('--uID', type=str, default='', help='')  # not used
 
     args = parser.parse_args()
 

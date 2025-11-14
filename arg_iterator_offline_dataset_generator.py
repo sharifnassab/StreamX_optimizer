@@ -18,8 +18,6 @@ PYTHON_ENTRYPOINT = "stream_ac_continuous_offline_dataset_generator.py"
 
 COMMON_ENV = {
     "total_steps":      5_000_000,
-    #
-    "log_backend":      "none",
 }
 
 
