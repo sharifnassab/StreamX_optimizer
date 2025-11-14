@@ -743,6 +743,8 @@ if __name__ == '__main__':
     parser.add_argument('--dataset_path', type=str, default='/Users/arsalan/Desktop/Codes/StreamX/offline_dataset/ObGD_ObGD_lam_0.8__', help='Path to the offline dataset .pkl file to load.')
     parser.add_argument('--seed', type=int, default=0, help='Seed for the observer network initialization.')
     parser.add_argument('--total_steps', type=int, default=5_000_000, help='Total number of steps to train the observer.')
+    parser.add_argument('--max_time', type=str, default="", help='Not effective in this code.')
+    
     # Observer Arguments
     parser.add_argument('--observer_hidden_depth', type=int, default=2)
     parser.add_argument('--observer_hidden_width', type=int, default=128)
