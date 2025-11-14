@@ -3,7 +3,7 @@ from _slurm_generator import generate_slurm
 
 RESOURCE_DEFAULTS = {
     "account":  "def-sutton",
-    "max_time": "02:59:00",
+    "max_time": "00:09:00",
     "cpus":     1,
     "mem":     '4G',
     "gpus":    '0',   #  v100:1,  0
@@ -22,6 +22,7 @@ COMMON_ENV = {
     #
     "log_backend":      "wandb_offline",
     "log_dir":          "/home/asharif/scratch/StreamX_optimizer/WandB_offline", 
+    "log_dir_for_pickle": "/home/asharif/scratch/StreamX_optimizer/pickles_observer",
     "project":          "StreamX_Offline_Observer",
     "log_freq":         400_000,
     "bin_size":         50_000,
