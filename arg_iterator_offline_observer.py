@@ -93,7 +93,7 @@ for env_name in environments:
         })
 
     
-    if 0: 
+    if 1: 
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
             "dataset_name":           [dataset_name],
@@ -104,11 +104,11 @@ for env_name in environments:
             "observer_initialization_sparsity": [0.9],
             "seed":                   seeds,
             #
-            "observer_optimizer":     ['ObtCm'],
+            "observer_optimizer":     ['OboCm'],
             "observer_lamda":         [0.8], 
             "observer_kappa":         [2.0], 
             "observer_momentum":      [0.9], 
-            "observer_entrywise_normalization": ['RMSProp', 'none'],
+            "observer_entrywise_normalization": ['RMSProp'],
             "observer_beta2":         [0.999],
             "observer_sig_power":     [2],
             "observer_in_trace_sample_scaling":['False'],
