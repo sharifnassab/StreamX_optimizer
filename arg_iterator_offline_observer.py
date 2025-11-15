@@ -93,7 +93,7 @@ for env_name in environments:
         })
 
     
-    if 1: 
+    if 0: 
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
             "dataset_name":           [dataset_name],
@@ -114,7 +114,7 @@ for env_name in environments:
             "observer_in_trace_sample_scaling":['False'],
         })
 
-    if 1: 
+    if 0: 
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
             "dataset_name":           [dataset_name],
@@ -135,7 +135,7 @@ for env_name in environments:
             "observer_in_trace_sample_scaling":['True'],
         })
 
-    if 1: 
+    if 0: 
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
             "dataset_name":           [dataset_name],
@@ -171,8 +171,8 @@ for env_name in environments:
             "observer_lamda":         [0.8], 
             "observer_kappa":         [2.0], 
             "observer_momentum":      [0.0], 
-            "policy_delta_clip":      ['10_avg_sq_max_10avg__dec_0.9998'],
-            "policy_delta_norm":      ['none'],
+            "observer_delta_clip":    ['10_avg_sq_max_10avg__dec_0.9998'],
+            "observer_delta_norm":    ['none'],
             "observer_entrywise_normalization": ['RMSProp'],
             "observer_beta2":         [0.999],
             "observer_sig_power":     [2],
@@ -181,7 +181,7 @@ for env_name in environments:
         
 
 
-    if 1: 
+    if 0: 
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
             "dataset_name":           [dataset_name],
@@ -203,7 +203,7 @@ for env_name in environments:
         })
 
 
-    if 1: 
+    if 0: 
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
             "dataset_name":           [dataset_name],
