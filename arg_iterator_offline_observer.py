@@ -106,7 +106,7 @@ for env_name in environments:
             #
             "observer_optimizer":     ['OboCm'],
             "observer_lamda":         [0.8], 
-            "observer_kappa":         [2.0], 
+            "observer_kappa":         [1.5, 2.0 ,3.0], 
             "observer_momentum":      [0.9], 
             "observer_entrywise_normalization": ['RMSProp'],
             "observer_beta2":         [0.999],
@@ -114,11 +114,115 @@ for env_name in environments:
             "observer_in_trace_sample_scaling":['False'],
         })
 
+    if 1: 
+        HYPER_SWEEPS.append({
+            "env_name":               [env_name],
+            "dataset_name":           [dataset_name],
+            "dataset_path":           [dataset_path],
+            #
+            "observer_hidden_depth":  [2],
+            "observer_hidden_width":  [128],
+            "observer_initialization_sparsity": [0.9],
+            "seed":                   seeds,
+            #
+            "observer_optimizer":     ['OboCm'],
+            "observer_lamda":         [0.8], 
+            "observer_kappa":         [2.0], 
+            "observer_momentum":      [0.9], 
+            "observer_entrywise_normalization": ['RMSProp'],
+            "observer_beta2":         [0.999],
+            "observer_sig_power":     [2],
+            "observer_in_trace_sample_scaling":['True'],
+        })
+
+    if 1: 
+        HYPER_SWEEPS.append({
+            "env_name":               [env_name],
+            "dataset_name":           [dataset_name],
+            "dataset_path":           [dataset_path],
+            #
+            "observer_hidden_depth":  [2],
+            "observer_hidden_width":  [128],
+            "observer_initialization_sparsity": [0.9],
+            "seed":                   seeds,
+            #
+            "observer_optimizer":     ['OboCm'],
+            "observer_lamda":         [0.8], 
+            "observer_kappa":         [2.0], 
+            "observer_momentum":      [0.0], 
+            "observer_entrywise_normalization": ['RMSProp', 'none'],
+            "observer_beta2":         [0.999],
+            "observer_sig_power":     [2],
+            "observer_in_trace_sample_scaling":['False'],
+        })
+
+    if 1: 
+        HYPER_SWEEPS.append({
+            "env_name":               [env_name],
+            "dataset_name":           [dataset_name],
+            "dataset_path":           [dataset_path],
+            #
+            "observer_hidden_depth":  [2],
+            "observer_hidden_width":  [128],
+            "observer_initialization_sparsity": [0.9],
+            "seed":                   seeds,
+            #
+            "observer_optimizer":     ['Obom'],
+            "observer_lamda":         [0.8], 
+            "observer_kappa":         [2.0], 
+            "observer_momentum":      [0.0], 
+            "policy_delta_clip":      ['10_avg_sq_max_10avg__dec_0.9998'],
+            "policy_delta_norm":      ['none'],
+            "observer_entrywise_normalization": ['RMSProp'],
+            "observer_beta2":         [0.999],
+            "observer_sig_power":     [2],
+            "observer_in_trace_sample_scaling":['False'],
+        })
+        
 
 
+    if 1: 
+        HYPER_SWEEPS.append({
+            "env_name":               [env_name],
+            "dataset_name":           [dataset_name],
+            "dataset_path":           [dataset_path],
+            #
+            "observer_hidden_depth":  [5],
+            "observer_hidden_width":  [512],
+            "observer_initialization_sparsity": [0.9],
+            "seed":                   seeds,
+            #
+            "observer_optimizer":     ['OboCm'],
+            "observer_lamda":         [0.8], 
+            "observer_kappa":         [2.0], 
+            "observer_momentum":      [0.9], 
+            "observer_entrywise_normalization": ['RMSProp', 'none'],
+            "observer_beta2":         [0.999],
+            "observer_sig_power":     [2],
+            "observer_in_trace_sample_scaling":['False'],
+        })
 
 
-
+    if 1: 
+        HYPER_SWEEPS.append({
+            "env_name":               [env_name],
+            "dataset_name":           [dataset_name],
+            "dataset_path":           [dataset_path],
+            #
+            "observer_hidden_depth":  [2],
+            "observer_hidden_width":  [128],
+            "observer_initialization_sparsity": [0.9],
+            "seed":                   seeds,
+            #
+            "observer_optimizer":     ['OboCm'],
+            "observer_lamda":         [0.8], 
+            "observer_kappa":         [2.0], 
+            "observer_momentum":      [0.9], 
+            "observer_entrywise_normalization": ['RMSProp'],
+            "observer_beta2":         [0.9999],
+            "observer_sig_power":     [2],
+            "observer_in_trace_sample_scaling":['False'],
+        })
 
 # ------------------------------------------------------------------
 # --------- 2. Normally nothing below needs editing ----------------
