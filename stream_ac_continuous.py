@@ -26,6 +26,8 @@ from optim import ObGDN as ObGDN_Optimizer
 from optim import ObGDm as ObGDm_Optimizer
 from optim import Obtnnzm as Obtnnzm_Optimizer
 from optim import Obtm as Obtm_Optimizer
+from optim import Obom as Obom_Optimizer
+from optim import OboCm as OboCm_Optimizer
 from time_wrapper import AddTimeInfo
 from normalization_wrappers import NormalizeObservation, ScaleReward
 from sparse_init import sparse_init
@@ -248,6 +250,18 @@ class StreamAC(nn.Module):
         if opt_name == 'obtm':
             return Obtm_Optimizer(
                 params, gamma=gamma, lamda=lamda, kappa=kappa,  weight_decay=weight_decay, sig_power=sig_power, delta_clip=delta_clip,  delta_norm=delta_norm, momentum=momentum,
+                entrywise_normalization=entrywise_normalization, beta2=beta2, in_trace_sample_scaling=in_trace_sample_scaling
+            )
+        
+        if opt_name == 'obom':
+            return Obom_Optimizer(
+                params, gamma=gamma, lamda=lamda, kappa=kappa,  weight_decay=weight_decay, sig_power=sig_power, delta_clip=delta_clip,  delta_norm=delta_norm, momentum=momentum,
+                entrywise_normalization=entrywise_normalization, beta2=beta2, in_trace_sample_scaling=in_trace_sample_scaling
+            )
+        
+        if opt_name == 'obocm':
+            return OboCm_Optimizer(
+                params, gamma=gamma, lamda=lamda, kappa=kappa, weight_decay=weight_decay, sig_power=sig_power, momentum=momentum, 
                 entrywise_normalization=entrywise_normalization, beta2=beta2, in_trace_sample_scaling=in_trace_sample_scaling
             )
         
@@ -560,7 +574,7 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
 
 
 if __name__ == '__main__':
-    optimizer_choices = ['ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD', 'ObtC', 'ObtN', 'Obt', 'Obtnnz', 'Obtnnzm', 'ObGDN', 'ObGDm', 'ObtCm', 'Obtm']
+    optimizer_choices = ['ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD', 'ObtC', 'ObtN', 'Obt', 'Obtnnz', 'Obtnnzm', 'ObGDN', 'ObGDm', 'ObtCm', 'Obtm', 'Obom', 'OboCm']
     parser = argparse.ArgumentParser(description='Stream AC(λ)')
     parser.add_argument('--env_name', type=str, default='Ant-v5')  # HalfCheetah-v4
     parser.add_argument('--seed', type=int, default=0)
@@ -658,6 +672,8 @@ if __name__ == '__main__':
         'Obtnnzm':      shared_params + ['entrywise_normalization', 'beta2', 'u_trace', 'delta_clip', 'delta_norm', 'momentum'],
         'ObGDN':        shared_params + ['lr', 'delta_clip', 'delta_norm'],
         'ObGDm':        shared_params + ['lr', 'momentum'],
+        'Obom':         shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'delta_clip', 'delta_norm', 'momentum'],
+        'OboCm':        shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'momentum'],
         }
 
     def build_spec(kind, args, required_optimizer_params) -> dict:

@@ -39,7 +39,7 @@ run_description = 'test0'
 HYPER_SWEEPS = []
 
 environments = ['Ant', 'HalfCheetah', 'Hopper', 'Walker2d', 'Humanoid']
-seeds = [i for i in range(1)]
+seeds = [i for i in range(5)]
 
 
 
@@ -47,7 +47,7 @@ for env_name in environments:
     dataset_path = f"/home/asharif/scratch/StreamX_optimizer/offline_datasets/ObGD_ObGD_lam_0.8/seed0/{env_name}"
     dataset_name = 'ObGD_ObGD_lam_0.8__seed0'
 
-    if 1: 
+    if 0: 
         HYPER_SWEEPS.append({
             "env_name":             [env_name],
             "dataset_name":         [dataset_name],
