@@ -450,7 +450,7 @@ if 1:   # momentum
         "policy_kappa":         [3], # 3 is optimum consistently
         "policy_entropy_coeff": [0.01],
         "policy_lamda":         [0.8],
-        "critic_optimizer":     ['OboCm'],
+        "critic_optimizer":     ['OboC'],
         "critic_lamda":         [0.8],
         "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
         "critic_momentum":      [0.9],
@@ -465,7 +465,7 @@ if 1:   # momentum
 if 1:  # delta normalization for policy
     HYPER_SWEEPS.append({
         "env_name":             environments,
-        "policy_optimizer":     ['Obom'],
+        "policy_optimizer":     ['Obo'],
         "policy_lamda":         [0.8],
         "policy_kappa":         [10, 20, 30],
         "policy_momentum":      [0.9],
@@ -477,7 +477,7 @@ if 1:  # delta normalization for policy
         "policy_in_trace_sample_scaling":['False'],
         "policy_entropy_coeff": [0.01],
         "policy_weight_decay":  [0.0],
-        "critic_optimizer":     ['OboCm'],
+        "critic_optimizer":     ['OboC'],
         "critic_lamda":         [0.8],
         "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
         "critic_momentum":      [0.9],
@@ -492,7 +492,7 @@ if 1:  # delta normalization for policy
 if 1:  # sig power 1
     HYPER_SWEEPS.append({
         "env_name":             environments,
-        "policy_optimizer":     ['Obom'],
+        "policy_optimizer":     ['Obo'],
         "policy_lamda":         [0.8],
         "policy_kappa":         [20],
         "policy_momentum":      [0.9],
@@ -504,7 +504,7 @@ if 1:  # sig power 1
         "policy_in_trace_sample_scaling":['False'],
         "policy_entropy_coeff": [0.01],
         "policy_weight_decay":  [0.0],
-        "critic_optimizer":     ['OboCm'],
+        "critic_optimizer":     ['OboC'],
         "critic_lamda":         [0.8],
         "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
         "critic_momentum":      [0.9],
@@ -519,7 +519,7 @@ if 1:  # sig power 1
 if 1:  # delta normalization for policy
     HYPER_SWEEPS.append({
         "env_name":             environments,
-        "policy_optimizer":     ['Obom'],
+        "policy_optimizer":     ['Obo'],
         "policy_lamda":         [0.8],
         "policy_kappa":         [10, 20],
         "policy_momentum":      [0.9],
@@ -532,6 +532,33 @@ if 1:  # delta normalization for policy
         "policy_entropy_coeff": [0.01],
         "policy_weight_decay":  [0.0],
         "critic_optimizer":     ['ObtCm'],
+        "critic_lamda":         [0.8],
+        "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
+        "critic_momentum":      [0.9],
+        "critic_entrywise_normalization": ['RMSProp'],
+        "critic_beta2":         [0.999],
+        "critic_sig_power":     [2],
+        "critic_in_trace_sample_scaling":['False'],
+        "seed":                 seeds,
+    })
+
+if 1:  # delta normalization for policy
+    HYPER_SWEEPS.append({
+        "env_name":             environments,
+        "policy_optimizer":     ['Obonz'],
+        "policy_lamda":         [0.8],
+        "policy_kappa":         [10, 20, 30],
+        "policy_momentum":      [0.9],
+        "policy_u_trace":       [0.01, .8],
+        "policy_entrywise_normalization": ['RMSProp'],
+        "policy_beta2":         [0.999],
+        "policy_delta_clip":    ['10_avg_sq_max_10avg__dec_0.9998'],
+        "policy_delta_norm":    ['.9998clipAbs'],
+        "policy_sig_power":     [2],
+        "policy_in_trace_sample_scaling":['False'],
+        "policy_entropy_coeff": [0.01],
+        "policy_weight_decay":  [0.0],
+        "critic_optimizer":     ['OboC'],
         "critic_lamda":         [0.8],
         "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
         "critic_momentum":      [0.9],

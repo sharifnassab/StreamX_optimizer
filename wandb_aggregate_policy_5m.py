@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 """
+wandb_aggregate_policy_5m.py
 W&B "Lite" Project Aggregator (Multi-Environment & Multiprocessing)
 
 This script fetches runs from multiple "heavy" W&B environment-specific 

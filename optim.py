@@ -3,7 +3,7 @@ import math
 from delta_clipper import delta_clipper
 
 
-class Obom(torch.optim.Optimizer): # same as Obn but also has delta_clipping
+class Obo(torch.optim.Optimizer): # same as Obn but also has delta_clipping
     def __init__(self, params, lr=1.0, gamma=0.99, lamda=0.0, kappa=2.0, delta_clip='none', delta_norm='none', beta2=0.999, entrywise_normalization='none', sig_power=2, in_trace_sample_scaling=True, weight_decay=0.0, momentum=0.0):
         defaults = dict(lr=lr, gamma=gamma, lamda=lamda, beta2=beta2, beta_momentum=momentum)
         self.gamma = gamma
@@ -16,7 +16,7 @@ class Obom(torch.optim.Optimizer): # same as Obn but also has delta_clipping
         self.entrywise_normalization = entrywise_normalization # 'none' or 'RMSprop' or 'RMSPropInTrace' (meaning z accumulates entrywised scaled grads)  (default: RMSProp)
         self.in_trace_sample_scaling = in_trace_sample_scaling  # if True, z accumulates grads scaled down by their norms. This can be applied with or without entrywise_normalization.
         self.delta_clipper = delta_clipper(clip_type=delta_clip, normalization_type=delta_norm)
-        super(Obom, self).__init__(params, defaults)
+        super(Obo, self).__init__(params, defaults)
 
     def step(self, delta, reset=False):
         self.t_val += 1
@@ -27,7 +27,7 @@ class Obom(torch.optim.Optimizer): # same as Obn but also has delta_clipping
                 if len(state) == 0:
                     state["entrywise_squared_grad"] = torch.ones_like(p.data)
                 v = state["entrywise_squared_grad"]
-                if self.entrywise_normalization.lower() in ['rmsprop', 'rmspropintrace']:
+                if self.entrywise_normalization.lower() in ['rmsprop']:
                     v.mul_(group["beta2"]).addcmul_(p.grad, p.grad, value=1.0 - group["beta2"])
                     v_hat = (v / (1.0 - group["beta2"] ** self.t_val)).sqrt() + 1e-8
                     state["rmsprop_v_hat"] = v_hat
@@ -49,23 +49,18 @@ class Obom(torch.optim.Optimizer): # same as Obn but also has delta_clipping
                     state["eligibility_trace"] = torch.zeros_like(p.data)
                 e = state["eligibility_trace"]
                 v = state["entrywise_squared_grad"]
-                if self.entrywise_normalization.lower()=='rmspropintrace':
-                    v_hat_in_trace = state["rmsprop_v_hat"] 
-                    v_hat_for_trace_norm = 1.0
-                elif self.entrywise_normalization.lower() == 'rmsprop':
-                    v_hat_in_trace = torch.ones_like(p.data)
+                if self.entrywise_normalization.lower() == 'rmsprop':
                     v_hat_for_trace_norm = state["rmsprop_v_hat"] 
                 elif self.entrywise_normalization.lower() == 'none':
-                    v_hat_in_trace = torch.ones_like(p.data)
                     v_hat_for_trace_norm = 1.0
                 else:
                     raise(ValueError(f'     {self.entrywise_normalization}     not supported'))
                 
-                e.mul_(group["gamma"] * group["lamda"]).addcdiv_(p.grad, v_hat_in_trace, value=scale_of_sample_in_trace)
-                z_sum += ((e.square()* v_hat_for_trace_norm).sum()).abs().item()
+                e.mul_(group["gamma"] * group["lamda"]).add_(p.grad, alpha=scale_of_sample_in_trace)
+                z_sum += ((e.square() / v_hat_for_trace_norm).sum()).abs().item()
         
-        self.sigma +=  (1-self.gamma*self.lamda) * (norm_grad-self.sigma**(self.sig_power/2.0))
-        norm_normalizer = ((self.sigma/(1-(self.gamma*self.lamda)**self.t_val)) + 1e-16) ** (1.0/self.sig_power)
+        self.sigma +=  (1-self.gamma*self.lamda) * (norm_grad**(self.sig_power/2.0)-self.sigma)
+        norm_normalizer = ((self.sigma/(1-(self.gamma*self.lamda)**self.t_val)) + 1e-12) ** (1.0/self.sig_power)
         z_normalizer = math.sqrt(z_sum/(1-(self.gamma*self.lamda)**self.t_val))
         dot_product =  self.kappa * norm_normalizer * z_normalizer
         step_size = 1 / dot_product
@@ -80,12 +75,11 @@ class Obom(torch.optim.Optimizer): # same as Obn but also has delta_clipping
                     state["momentum"] = torch.zeros_like(p.data)
                 m = state["momentum"]
                 m.mul_(group["beta_momentum"]).add_(e, alpha=-safe_delta*step_size)
-                p.data.mul_(1.0-self.weight_decay/self.kappa)
+                if self.weight_decay > 0.0:
+                    p.data.mul_(1.0-self.weight_decay/self.kappa)
                 if self.entrywise_normalization.lower() == 'rmsprop':
-                #   p.data.addcdiv_(e, state["rmsprop_v_hat"], value=-safe_delta*step_size)
                     p.data.addcdiv_(m, state["rmsprop_v_hat"], value=1-group["beta_momentum"])
-                elif self.entrywise_normalization.lower() in ['rmspropintrace', 'none']:
-                #   p.data.add_(e, alpha=-safe_delta*step_size)
+                elif self.entrywise_normalization.lower() == 'none':
                     p.data.add_(m, alpha=1-group["beta_momentum"])
                 if reset:
                     e.zero_()
@@ -93,8 +87,74 @@ class Obom(torch.optim.Optimizer): # same as Obn but also has delta_clipping
         info = {'M':dot_product, 'clipped_step_size':step_size, 'delta':delta, 'delta_used':safe_delta, 'abs_delta':abs(delta), 'norm1_eligibility_trace':z_sum}
         return info
 
+class Obonz(torch.optim.Optimizer): # Ob with trace and no norm z
+    def __init__(self, params, lr=1.0, gamma=0.99, lamda=0.0, kappa=2.0, delta_clip='none', delta_norm='none', beta2=0.999, entrywise_normalization='none', u_trace=0.01, weight_decay=0.0, momentum=0.0):
+        defaults = dict(lr=lr, gamma=gamma, lamda=lamda, beta2=beta2, beta_momentum=momentum)
+        self.gamma = gamma
+        self.lamda = lamda
+        self.kappa = kappa
+        self.weight_decay = weight_decay
+        self.u_trace = u_trace
+        self.u_bar = 0.0
+        self.t_val = 0
+        self.entrywise_normalization = entrywise_normalization # 'none' or 'RMSprop' or 'RMSPropInTrace' (meaning z accumulates entrywised scaled grads)  (default: RMSProp)
+        self.delta_clipper = delta_clipper(clip_type=delta_clip, normalization_type=delta_norm)
+        super(Obonz, self).__init__(params, defaults)
 
-class OboCm(torch.optim.Optimizer): # same as Obn but also has delta_clipping
+    def step(self, delta, reset=False):
+        self.t_val += 1
+        norm_grad = 0
+        for group in self.param_groups:
+            for p in group["params"]:
+                state = self.state[p]
+                if len(state) == 0:
+                    state["entrywise_squared_grad"] = torch.ones_like(p.data)
+                v = state["entrywise_squared_grad"]
+                if self.entrywise_normalization.lower() in ['rmsprop']:
+                    v.mul_(group["beta2"]).addcmul_(p.grad, p.grad, value=1.0 - group["beta2"])
+                    v_hat = (v / (1.0 - group["beta2"] ** self.t_val)).sqrt() + 1e-8
+                    state["rmsprop_v_hat"] = v_hat
+                elif self.entrywise_normalization.lower()=='none':
+                    v_hat = 1.0
+                norm_grad += ((p.grad.square()/ v_hat).sum()).abs().item()
+        
+
+        self.u_bar +=  self.u_trace * (norm_grad-self.u_bar)
+        norm_normalizer = max(norm_grad, math.sqrt(norm_grad*self.u_bar/(1-(1-self.u_trace)**self.t_val)))
+        
+        scale_of_sample_in_trace = 1.0 / norm_normalizer
+        safe_delta = self.delta_clipper.clip_and_norm(delta)
+
+        for group in self.param_groups:
+            for p in group["params"]:
+                state = self.state[p]
+                if "eligibility_trace" not in state:
+                    state["eligibility_trace"] = torch.zeros_like(p.data)
+                e = state["eligibility_trace"]
+                v = state["entrywise_squared_grad"]
+                if "momentum" not in state:
+                    state["momentum"] = torch.zeros_like(p.data)
+                m = state["momentum"]
+                if self.entrywise_normalization.lower() == 'rmsprop':
+                    v_hat = state["rmsprop_v_hat"] 
+                
+                e.mul_(group["gamma"] * group["lamda"]).add_(p.grad, alpha=scale_of_sample_in_trace)
+                
+                p.data.mul_(1.0-self.weight_decay/self.kappa)
+                m.mul_(group["beta_momentum"]).add_(e, alpha=-safe_delta/self.kappa)
+                if self.entrywise_normalization.lower() == 'rmsprop':
+                    p.data.addcdiv_(m, v_hat, value=1-group["beta_momentum"])
+                elif self.entrywise_normalization.lower() in ['rmspropintrace', 'none']:
+                    p.data.add_(m, alpha=1-group["beta_momentum"])
+                if reset:
+                    e.zero_()
+
+        info = {'delta':delta, 'delta_used':safe_delta, 'abs_delta':abs(delta)}
+        return info
+    
+
+
+class OboC(torch.optim.Optimizer): # same as Obn but also has delta_clipping
     def __init__(self, params, lr=1.0, gamma=0.99, lamda=0.0, kappa=2.0,  beta2=0.999, entrywise_normalization='none', sig_power=2, in_trace_sample_scaling=True, weight_decay=0.0, momentum=0.0):
         defaults = dict(lr=lr, gamma=gamma, lamda=lamda, beta2=beta2, beta_momentum=momentum)
         self.gamma = gamma
@@ -106,7 +166,7 @@ class OboCm(torch.optim.Optimizer): # same as Obn but also has delta_clipping
         self.t_val = 0
         self.entrywise_normalization = entrywise_normalization # 'none' or 'RMSprop' or 'RMSPropInTrace' (meaning z accumulates entrywised scaled grads)  (default: RMSProp)
         self.in_trace_sample_scaling = in_trace_sample_scaling  # if True, z accumulates grads scaled down by their norms. This can be applied with or without entrywise_normalization.
-        super(OboCm, self).__init__(params, defaults)
+        super(OboC, self).__init__(params, defaults)
 
     def step(self, delta, reset=False):
         self.t_val += 1
@@ -117,7 +177,7 @@ class OboCm(torch.optim.Optimizer): # same as Obn but also has delta_clipping
                 if len(state) == 0:
                     state["entrywise_squared_grad"] = torch.ones_like(p.data)
                 v = state["entrywise_squared_grad"]
-                if self.entrywise_normalization.lower() in ['rmsprop', 'rmspropintrace']:
+                if self.entrywise_normalization.lower() in ['rmsprop']:
                     v.mul_(group["beta2"]).addcmul_(p.grad, p.grad, value=1.0 - group["beta2"])
                     v_hat = (v / (1.0 - group["beta2"] ** self.t_val)).sqrt() + 1e-8
                     state["rmsprop_v_hat"] = v_hat
@@ -139,22 +199,17 @@ class OboCm(torch.optim.Optimizer): # same as Obn but also has delta_clipping
                     state["eligibility_trace"] = torch.zeros_like(p.data)
                 e = state["eligibility_trace"]
                 v = state["entrywise_squared_grad"]
-                if self.entrywise_normalization.lower()=='rmspropintrace':
-                    v_hat_in_trace = state["rmsprop_v_hat"] 
-                    v_hat_for_trace_norm = 1.0
-                elif self.entrywise_normalization.lower() == 'rmsprop':
-                    v_hat_in_trace = torch.ones_like(p.data)
+                if self.entrywise_normalization.lower() == 'rmsprop':
                     v_hat_for_trace_norm = state["rmsprop_v_hat"] 
                 elif self.entrywise_normalization.lower() == 'none':
-                    v_hat_in_trace = torch.ones_like(p.data)
                     v_hat_for_trace_norm = 1.0
                 else:
                     raise(ValueError(f'     {self.entrywise_normalization}     not supported'))
                 
-                e.mul_(group["gamma"] * group["lamda"]).addcdiv_(p.grad, v_hat_in_trace, value=scale_of_sample_in_trace)
-                z_sum += ((e.square()* v_hat_for_trace_norm).sum()).abs().item()
+                e.mul_(group["gamma"] * group["lamda"]).add_(p.grad, alpha=scale_of_sample_in_trace)
+                z_sum += ((e.square() / v_hat_for_trace_norm).sum()).abs().item()
         
-        self.sigma +=  (1-self.gamma*self.lamda) * (norm_grad-self.sigma**(self.sig_power/2.0))
+        self.sigma +=  (1-self.gamma*self.lamda) * (norm_grad**(self.sig_power/2.0)-self.sigma)
         norm_normalizer = ((self.sigma/(1-(self.gamma*self.lamda)**self.t_val)) + 1e-16) ** (1.0/self.sig_power)
         z_normalizer = math.sqrt(z_sum/(1-(self.gamma*self.lamda)**self.t_val))
         delta_bar = max(abs(delta), 1.0)
@@ -170,14 +225,15 @@ class OboCm(torch.optim.Optimizer): # same as Obn but also has delta_clipping
                     state["momentum"] = torch.zeros_like(p.data)
                 m = state["momentum"]
                 m.mul_(group["beta_momentum"]).add_(e, alpha=-delta*step_size)
-                p.data.mul_(1.0-self.weight_decay/self.kappa)
+                if self.weight_decay > 0.0:
+                    p.data.mul_(1.0-self.weight_decay/self.kappa)
                 # if self.entrywise_normalization.lower() == 'rmsprop':
                 #     p.data.addcdiv_(e, state["rmsprop_v_hat"], value=-delta*step_size)
                 # elif self.entrywise_normalization.lower() in ['rmspropintrace', 'none']:
                 #     p.data.add_(e, alpha=-delta*step_size)
                 if self.entrywise_normalization.lower() == 'rmsprop':
                     p.data.addcdiv_(m, state["rmsprop_v_hat"], value=1-group["beta_momentum"])
-                elif self.entrywise_normalization.lower() in ['rmspropintrace', 'none']:
+                elif self.entrywise_normalization.lower() == 'none':
                     p.data.add_(m, alpha=1-group["beta_momentum"])
                 if reset:
                     e.zero_()
@@ -247,7 +303,7 @@ class Obtm(torch.optim.Optimizer): # same as Obn but also has delta_clipping
                 e.mul_(group["gamma"] * group["lamda"]).addcdiv_(p.grad, v_hat_in_trace, value=scale_of_sample_in_trace)
                 z_sum += ((e.square()* v_hat_for_trace_norm).sum()).abs().item()
         
-        self.sigma +=  (1-self.gamma*self.lamda) * (norm_grad-self.sigma**(self.sig_power/2.0))
+        self.sigma +=  (1-self.gamma*self.lamda) * (norm_grad**(self.sig_power/2.0)-self.sigma)
         norm_normalizer = ((self.sigma/(1-(self.gamma*self.lamda)**self.t_val)) + 1e-16) ** (1.0/self.sig_power)
         z_normalizer = math.sqrt(z_sum/(1-(self.gamma*self.lamda)**self.t_val))
         dot_product =  self.kappa * norm_normalizer * z_normalizer
@@ -471,7 +527,7 @@ class Obt(torch.optim.Optimizer): # same as Obn but also has delta_clipping
                 e.mul_(group["gamma"] * group["lamda"]).addcdiv_(p.grad, v_hat_in_trace, value=scale_of_sample_in_trace)
                 z_sum += ((e.square()* v_hat_for_trace_norm).sum()).abs().item()
         
-        self.sigma +=  (1-self.gamma*self.lamda) * (norm_grad-self.sigma**(self.sig_power/2.0))
+        self.sigma +=  (1-self.gamma*self.lamda) * (norm_grad**(self.sig_power/2.0)-self.sigma)
         norm_normalizer = ((self.sigma/(1-(self.gamma*self.lamda)**self.t_val)) + 1e-16) ** (1.0/self.sig_power)
         z_normalizer = math.sqrt(z_sum/(1-(self.gamma*self.lamda)**self.t_val))
         dot_product =  self.kappa * norm_normalizer * z_normalizer
@@ -559,7 +615,7 @@ class ObtN(torch.optim.Optimizer): # same as Obn but also has delta_clipping
                 e.mul_(group["gamma"] * group["lamda"]).addcdiv_(p.grad, v_hat_in_trace, value=scale_of_sample_in_trace)
                 z_sum += ((e.square()* v_hat_for_trace_norm).sum()).abs().item()
         
-        self.sigma +=  (1-self.gamma*self.lamda) * (norm_grad-self.sigma**(self.sig_power/2.0))
+        self.sigma +=  (1-self.gamma*self.lamda) * (norm_grad**(self.sig_power/2.0)-self.sigma)
         norm_normalizer = ((self.sigma/(1-(self.gamma*self.lamda)**self.t_val)) + 1e-16) ** (1.0/self.sig_power)
         z_normalizer = math.sqrt(z_sum/(1-(self.gamma*self.lamda)**self.t_val))
         self.delta_bar += self.delta_trace * (delta*delta - self.delta_bar)
@@ -645,7 +701,7 @@ class ObtCm(torch.optim.Optimizer): # same as Obn but also has delta_clipping
                 e.mul_(group["gamma"] * group["lamda"]).addcdiv_(p.grad, v_hat_in_trace, value=scale_of_sample_in_trace)
                 z_sum += ((e.square()* v_hat_for_trace_norm).sum()).abs().item()
         
-        self.sigma +=  (1-self.gamma*self.lamda) * (norm_grad-self.sigma**(self.sig_power/2.0))
+        self.sigma +=  (1-self.gamma*self.lamda) * (norm_grad**(self.sig_power/2.0)-self.sigma)
         norm_normalizer = ((self.sigma/(1-(self.gamma*self.lamda)**self.t_val)) + 1e-16) ** (1.0/self.sig_power)
         z_normalizer = math.sqrt(z_sum/(1-(self.gamma*self.lamda)**self.t_val))
         delta_bar = max(abs(delta), 1.0)
@@ -737,7 +793,7 @@ class ObtC(torch.optim.Optimizer): # same as Obn but also has delta_clipping
                 e.mul_(group["gamma"] * group["lamda"]).addcdiv_(p.grad, v_hat_in_trace, value=scale_of_sample_in_trace)
                 z_sum += ((e.square()* v_hat_for_trace_norm).sum()).abs().item()
         
-        self.sigma +=  (1-self.gamma*self.lamda) * (norm_grad-self.sigma**(self.sig_power/2.0))
+        self.sigma +=  (1-self.gamma*self.lamda) * (norm_grad**(self.sig_power/2.0)-self.sigma)
         norm_normalizer = ((self.sigma/(1-(self.gamma*self.lamda)**self.t_val)) + 1e-16) ** (1.0/self.sig_power)
         z_normalizer = math.sqrt(z_sum/(1-(self.gamma*self.lamda)**self.t_val))
         delta_bar = max(abs(delta), 1.0)
