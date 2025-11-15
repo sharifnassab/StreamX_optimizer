@@ -28,6 +28,8 @@ from optim import ObGDN as ObGDN_Optimizer
 from optim import ObGDm as ObGDm_Optimizer
 from optim import Obtnnzm as Obtnnzm_Optimizer
 from optim import Obtm as Obtm_Optimizer
+from optim import OboCm as OboCm_Optimizer
+from optim import Obom as Obom_Optimizer
 
 # --- Utilities ---
 from sparse_init import sparse_init
@@ -202,6 +204,17 @@ class OfflineObserver(nn.Module):
                                    in_trace_sample_scaling=in_trace_sample_scaling)
         if opt_name == 'obtm':
             return Obtm_Optimizer(params, gamma=gamma, lamda=lamda, kappa=kappa, weight_decay=weight_decay,
+                                  sig_power=sig_power, delta_clip=delta_clip, delta_norm=delta_norm,
+                                  momentum=momentum, entrywise_normalization=entrywise_normalization,
+                                  beta2=beta2, in_trace_sample_scaling=in_trace_sample_scaling)
+        
+        if opt_name == 'obocm':
+            return OboCm_Optimizer(params, gamma=gamma, lamda=lamda, kappa=kappa, weight_decay=weight_decay,
+                                   sig_power=sig_power, momentum=momentum,
+                                   entrywise_normalization=entrywise_normalization, beta2=beta2,
+                                   in_trace_sample_scaling=in_trace_sample_scaling)
+        if opt_name == 'obom':
+            return Obom_Optimizer(params, gamma=gamma, lamda=lamda, kappa=kappa, weight_decay=weight_decay,
                                   sig_power=sig_power, delta_clip=delta_clip, delta_norm=delta_norm,
                                   momentum=momentum, entrywise_normalization=entrywise_normalization,
                                   beta2=beta2, in_trace_sample_scaling=in_trace_sample_scaling)
@@ -736,7 +749,7 @@ if __name__ == '__main__':
     optimizer_choices = [
         'ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN',
         'AdaptiveObGD', 'ObtC', 'ObtN', 'Obt', 'Obtnnz', 'Obtnnzm',
-        'ObGDN', 'ObGDm', 'ObtCm', 'Obtm', 'monte_carlo'
+        'ObGDN', 'ObGDm', 'ObtCm', 'Obtm', 'monte_carlo', 'OboCm', 'Obom'
     ]
 
     parser = argparse.ArgumentParser(description='Offline Observer Training')
@@ -801,6 +814,8 @@ if __name__ == '__main__':
         'Obtnnzm': shared_params + ['entrywise_normalization', 'beta2', 'u_trace', 'delta_clip', 'delta_norm', 'momentum'],
         'ObGDN': shared_params + ['lr', 'delta_clip', 'delta_norm'],
         'ObGDm': shared_params + ['lr', 'momentum'],
+        'OboCm': shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'momentum'],
+        'Obom': shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'delta_clip', 'delta_norm', 'momentum'],
     }
 
     def build_spec(kind, args, required_optimizer_params) -> dict:
