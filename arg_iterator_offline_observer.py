@@ -93,7 +93,7 @@ for env_name in environments:
         })
 
     
-    if 1: 
+    if 1: # OboC
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
             "dataset_name":           [dataset_name],
@@ -114,7 +114,7 @@ for env_name in environments:
             "observer_in_trace_sample_scaling":['False'],
         })
 
-    if 1: 
+    if 1: # Obo
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
             "dataset_name":           [dataset_name],
@@ -135,7 +135,7 @@ for env_name in environments:
             "observer_in_trace_sample_scaling":['True'],
         })
 
-    if 1: 
+    if 1: # no momentum
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
             "dataset_name":           [dataset_name],
@@ -181,7 +181,7 @@ for env_name in environments:
         
 
 
-    if 1: 
+    if 1: # larger net
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
             "dataset_name":           [dataset_name],
@@ -203,7 +203,28 @@ for env_name in environments:
         })
 
 
-    if 1: 
+    if 1: # no sparse init
+        HYPER_SWEEPS.append({
+            "env_name":               [env_name],
+            "dataset_name":           [dataset_name],
+            "dataset_path":           [dataset_path],
+            #
+            "observer_hidden_depth":  [2],
+            "observer_hidden_width":  [128],
+            "observer_initialization_sparsity": [0.0],
+            "seed":                   seeds,
+            #
+            "observer_optimizer":     ['OboC'],
+            "observer_lamda":         [0.8], 
+            "observer_kappa":         [2.0], 
+            "observer_momentum":      [0.9], 
+            "observer_entrywise_normalization": ['RMSProp'],
+            "observer_beta2":         [0.999],
+            "observer_sig_power":     [2],
+            "observer_in_trace_sample_scaling":['False'],
+        })
+
+    if 1: # larger beta2
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
             "dataset_name":           [dataset_name],
