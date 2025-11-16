@@ -93,7 +93,7 @@ for env_name in environments:
         })
 
     
-    if 0: 
+    if 1: 
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
             "dataset_name":           [dataset_name],
@@ -104,7 +104,7 @@ for env_name in environments:
             "observer_initialization_sparsity": [0.9],
             "seed":                   seeds,
             #
-            "observer_optimizer":     ['OboCm'],
+            "observer_optimizer":     ['OboC'],
             "observer_lamda":         [0.8], 
             "observer_kappa":         [1.5, 2.0 ,3.0], 
             "observer_momentum":      [0.9], 
@@ -114,7 +114,7 @@ for env_name in environments:
             "observer_in_trace_sample_scaling":['False'],
         })
 
-    if 0: 
+    if 1: 
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
             "dataset_name":           [dataset_name],
@@ -125,7 +125,7 @@ for env_name in environments:
             "observer_initialization_sparsity": [0.9],
             "seed":                   seeds,
             #
-            "observer_optimizer":     ['OboCm'],
+            "observer_optimizer":     ['OboC'],
             "observer_lamda":         [0.8], 
             "observer_kappa":         [2.0], 
             "observer_momentum":      [0.9], 
@@ -135,7 +135,7 @@ for env_name in environments:
             "observer_in_trace_sample_scaling":['True'],
         })
 
-    if 0: 
+    if 1: 
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
             "dataset_name":           [dataset_name],
@@ -146,7 +146,7 @@ for env_name in environments:
             "observer_initialization_sparsity": [0.9],
             "seed":                   seeds,
             #
-            "observer_optimizer":     ['OboCm'],
+            "observer_optimizer":     ['OboC'],
             "observer_lamda":         [0.8], 
             "observer_kappa":         [2.0], 
             "observer_momentum":      [0.0], 
@@ -167,7 +167,7 @@ for env_name in environments:
             "observer_initialization_sparsity": [0.9],
             "seed":                   seeds,
             #
-            "observer_optimizer":     ['Obom'],
+            "observer_optimizer":     ['Obo'],
             "observer_lamda":         [0.8], 
             "observer_kappa":         [2.0], 
             "observer_momentum":      [0.0], 
@@ -181,7 +181,7 @@ for env_name in environments:
         
 
 
-    if 0: 
+    if 1: 
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
             "dataset_name":           [dataset_name],
@@ -192,7 +192,7 @@ for env_name in environments:
             "observer_initialization_sparsity": [0.9],
             "seed":                   seeds,
             #
-            "observer_optimizer":     ['OboCm'],
+            "observer_optimizer":     ['OboC'],
             "observer_lamda":         [0.8], 
             "observer_kappa":         [2.0], 
             "observer_momentum":      [0.9], 
@@ -203,7 +203,7 @@ for env_name in environments:
         })
 
 
-    if 0: 
+    if 1: 
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
             "dataset_name":           [dataset_name],
@@ -214,7 +214,7 @@ for env_name in environments:
             "observer_initialization_sparsity": [0.9],
             "seed":                   seeds,
             #
-            "observer_optimizer":     ['OboCm'],
+            "observer_optimizer":     ['OboC'],
             "observer_lamda":         [0.8], 
             "observer_kappa":         [2.0], 
             "observer_momentum":      [0.9], 

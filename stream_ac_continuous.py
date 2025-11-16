@@ -24,8 +24,8 @@ from optim import Obt as Obt_Optimizer
 from optim import Obtnnz as Obtnnz_Optimizer
 from optim import ObGDN as ObGDN_Optimizer
 from optim import ObGDm as ObGDm_Optimizer
-from optim import Obonz as Obonz_Optimizer
 from optim import Obtm as Obtm_Optimizer
+from optim import Obonz as Obonz_Optimizer
 from optim import Obo as Obo_Optimizer
 from optim import OboC as OboC_Optimizer
 from time_wrapper import AddTimeInfo
@@ -228,7 +228,7 @@ class StreamAC(nn.Module):
             )
         
         if opt_name == 'obonz':
-            return Obtnnz_Optimizer(
+            return Obonz_Optimizer(
                 params, gamma=gamma, lamda=lamda, kappa=kappa,  weight_decay=weight_decay, delta_clip=delta_clip,  delta_norm=delta_norm, momentum=momentum,
                 u_trace=u_trace, entrywise_normalization=entrywise_normalization, beta2=beta2
             )
@@ -259,7 +259,7 @@ class StreamAC(nn.Module):
                 entrywise_normalization=entrywise_normalization, beta2=beta2, in_trace_sample_scaling=in_trace_sample_scaling
             )
         
-        if opt_name == 'oboC':
+        if opt_name == 'oboc':
             return OboC_Optimizer(
                 params, gamma=gamma, lamda=lamda, kappa=kappa, weight_decay=weight_decay, sig_power=sig_power, momentum=momentum, 
                 entrywise_normalization=entrywise_normalization, beta2=beta2, in_trace_sample_scaling=in_trace_sample_scaling

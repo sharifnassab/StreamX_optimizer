@@ -516,7 +516,7 @@ if 1:  # sig power 1
     })
 
 
-if 1:  # delta normalization for policy
+if 0:  # delta normalization for policy
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['Obo'],
