@@ -108,10 +108,12 @@ if 0: # ObnC policy    # was not good
     })
 
 
-if 0:  # critic network size
+if 1:  # network size
     HYPER_SWEEPS.append({
         "env_name":             environments,
-        "critic_hidden_depth":  [2,5],
+        "policy_hidden_depth":  [5],
+        "policy_hidden_width":  [512],
+        "critic_hidden_depth":  [5],
         "critic_hidden_width":  [512],
         "policy_optimizer":     ['ObGD'],
         "policy_kappa":         [3], # 3 is optimum consistently
@@ -142,7 +144,7 @@ if 0:   # critic network size
         "seed":                 seeds,
     })
 
-if 1:  #  sparse initialization
+if 0:  #  sparse initialization
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "critic_hidden_depth":  [2],
@@ -548,7 +550,7 @@ if False:  # Obo large net
     })
 
 
-if 1:  # Obo sparse init
+if False:  # Obo sparse init
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_initialization_sparsity": [0.0],

@@ -4,7 +4,7 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=2048M
 #SBATCH --array=1-150
-#SBATCH --output=/home/asharif/scratch/StreamX_optimizer/outputs/2025_11_17__14_15_13__test0/0_0/output_%j.txt
+#SBATCH --output=/home/asharif/scratch/StreamX_optimizer/outputs/2025_11_17__14_19_24__test0/0_0/output_%j.txt
 #SBATCH --constraint=granite
 
 module purge
@@ -16,7 +16,7 @@ source ~/venv_streamx/bin/activate
 export PYTHONNOUSERSITE=1
 
 
-$(sed -n "${SLURM_ARRAY_TASK_ID}p" < /home/asharif/scratch/StreamX_optimizer/outputs/2025_11_17__14_15_13__test0/export_0_0.dat)
+$(sed -n "${SLURM_ARRAY_TASK_ID}p" < /home/asharif/scratch/StreamX_optimizer/outputs/2025_11_17__14_19_24__test0/export_0_0.dat)
 echo "Task ${SLURM_ARRAY_TASK_ID} started on $(hostname) at $(date)"
-python3 stream_ac_continuous.py --total_steps=$total_steps --policy_gamma=$policy_gamma --policy_lr=$policy_lr --critic_kappa=$critic_kappa --critic_entrywise_normalization=$critic_entrywise_normalization --critic_beta2=$critic_beta2 --critic_gamma=$critic_gamma --critic_lr=$critic_lr --observer_optimizer=$observer_optimizer --log_backend=$log_backend --log_dir=$log_dir --log_dir_for_pickle=$log_dir_for_pickle --logging_level=$logging_level --project=$project --env_name=$env_name --critic_hidden_depth=$critic_hidden_depth --critic_hidden_width=$critic_hidden_width --policy_initialization_sparsity=$policy_initialization_sparsity --critic_initialization_sparsity=$critic_initialization_sparsity --policy_optimizer=$policy_optimizer --policy_kappa=$policy_kappa --policy_entropy_coeff=$policy_entropy_coeff --policy_lamda=$policy_lamda --critic_lamda=$critic_lamda --critic_optimizer=$critic_optimizer --seed=$seed --max_time=$max_time --uID=$uID
+python3 stream_ac_continuous.py --total_steps=$total_steps --policy_gamma=$policy_gamma --policy_lr=$policy_lr --critic_kappa=$critic_kappa --critic_entrywise_normalization=$critic_entrywise_normalization --critic_beta2=$critic_beta2 --critic_gamma=$critic_gamma --critic_lr=$critic_lr --observer_optimizer=$observer_optimizer --log_backend=$log_backend --log_dir=$log_dir --log_dir_for_pickle=$log_dir_for_pickle --logging_level=$logging_level --project=$project --env_name=$env_name --policy_hidden_depth=$policy_hidden_depth --policy_hidden_width=$policy_hidden_width --critic_hidden_depth=$critic_hidden_depth --critic_hidden_width=$critic_hidden_width --policy_optimizer=$policy_optimizer --policy_kappa=$policy_kappa --policy_entropy_coeff=$policy_entropy_coeff --policy_lamda=$policy_lamda --critic_lamda=$critic_lamda --critic_optimizer=$critic_optimizer --seed=$seed --max_time=$max_time --uID=$uID
 echo "Program test finished with exit code $? at: `date`"
