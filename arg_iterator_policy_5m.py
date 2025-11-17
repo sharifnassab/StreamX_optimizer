@@ -5,7 +5,7 @@ RESOURCE_DEFAULTS = {
     "account":  "def-sutton",
     "max_time": "11:00:00",
     "cpus":     1,
-    "mem":     '2G',
+    "mem":     '6G',
     "gpus":    '0',   #  v100:1,  0
     "constraint": "granite"    # this is a CPU type on Nibi
 }
@@ -439,7 +439,7 @@ if 0:   # momentum
         "seed":                 seeds,
     })
 
-if False:   # momentum
+if False:   # ObGD momentum
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "critic_hidden_depth":  [2],
@@ -483,7 +483,7 @@ if False:   # ObGD - OboC
         "seed":                 seeds,
     })
 
-if 0:  # Obo
+if False:  # Obo
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['Obo'],
