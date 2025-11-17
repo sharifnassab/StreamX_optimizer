@@ -564,7 +564,10 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
     logger.finish()
 
     if logging_spec['dir_pickle'] != 'none':
-        save_dir = os.path.join(logging_spec['dir_pickle'],  run_name)
+        name_of_file =(run_name if len(run_name)<255 else
+                       logging_spec.get('run_name') if (logging_spec.get('run_name', '')!='') else 
+                       run_name[:255])
+        save_dir = os.path.join(logging_spec['dir_pickle'],  name_of_file)
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
         with open(os.path.join(save_dir, "seed_{}.pkl".format(seed)), "wb") as f:

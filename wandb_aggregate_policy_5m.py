@@ -146,7 +146,7 @@ def process_group(args):
     group_index, group_count = group_index_tuple
     
     # 2. Each worker needs its own wandb.Api instance
-    local_api = wandb.Api(timeout=19)
+    local_api = wandb.Api(timeout=40)
 
     num_envs_in_group = len(env_runs_data_dict)
     total_seeds_in_group = sum(len(runs) for runs in env_runs_data_dict.values())
@@ -378,7 +378,7 @@ def main():
     """Main aggregation logic."""
     
     # Instantiate API in main process for setup
-    api = wandb.Api(timeout=19) 
+    api = wandb.Api(timeout=40) 
     
     # --- 4.1. Get Destination Runs (for incremental checks) ---
     print(f"Fetching existing 'lite' runs from {DEST_PROJECT} to check timestamps...")

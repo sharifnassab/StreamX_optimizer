@@ -3,9 +3,9 @@ from _slurm_generator import generate_slurm
 
 RESOURCE_DEFAULTS = {
     "account":  "def-sutton",
-    "max_time": "10:00:00",
+    "max_time": "06:00:00",
     "cpus":     1,
-    "mem":     '6G',
+    "mem":     '2G',
     "gpus":    '0',   #  v100:1,  0
     "constraint": "granite"    # this is a CPU type on Nibi
 }
@@ -31,7 +31,7 @@ COMMON_ENV = {
     #
     "observer_optimizer": 'none',
     #
-    "log_backend":          "wandb_offline",
+    "log_backend":          "none",
     "log_dir":              "/home/asharif/scratch/StreamX_optimizer/WandB_offline", #"/home/asharif/StreamX_optimizer/WandB_offline",
     "log_dir_for_pickle":   "/home/asharif/scratch/StreamX_optimizer/Pickles",
     "logging_level":        "light",      # "light" , "heavy"
@@ -461,11 +461,11 @@ if False:   # momentum
         "seed":                 seeds,
     })
 
-if 1:   # momentum
+if False:   # ObGD - OboC
     HYPER_SWEEPS.append({
         "env_name":             environments,
-        "critic_hidden_depth":  [5],
-        "critic_hidden_width":  [512],
+        "critic_hidden_depth":  [2],
+        "critic_hidden_width":  [128],
         "critic_initialization_sparsity": [0.9],
         "policy_optimizer":     ['ObGD'],
         "policy_kappa":         [3], # 3 is optimum consistently
@@ -483,36 +483,14 @@ if 1:   # momentum
         "seed":                 seeds,
     })
 
-if 1:   # momentum
-    HYPER_SWEEPS.append({
-        "env_name":             environments,
-        "critic_hidden_depth":  [2],
-        "critic_hidden_width":  [128],
-        "critic_initialization_sparsity": [0.0],
-        "policy_optimizer":     ['ObGD'],
-        "policy_kappa":         [3], # 3 is optimum consistently
-        "policy_entropy_coeff": [0.01],
-        "policy_lamda":         [0.8],
-        "critic_optimizer":     ['OboC'],
-        "critic_lamda":         [0.8],
-        "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
-        "critic_momentum":      [0.9],
-        "critic_u_trace":       [0.01],
-        "critic_entrywise_normalization": ['RMSProp'],
-        "critic_beta2":         [0.999],
-        "critic_sig_power":     [2],
-        "critic_in_trace_sample_scaling":['False'],
-        "seed":                 seeds,
-    })
-
-if False:  # Obo
+if 1:  # Obo
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['Obo'],
         "policy_lamda":         [0.8],
-        "policy_kappa":         [10, 20, 30],
+        "policy_kappa":         [20],
         "policy_momentum":      [0.9],
-        "policy_u_trace":       [0.01],
+        "policy_u_trace":       [1],
         "policy_entrywise_normalization": ['RMSProp'],
         "policy_beta2":         [0.999],
         "policy_delta_clip":    ['10_avg_sq_max_10avg__dec_0.9998'],
@@ -525,12 +503,13 @@ if False:  # Obo
         "critic_lamda":         [0.8],
         "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
         "critic_momentum":      [0.9],
-        "critic_u_trace":       [0.01, 1.0],
+        "critic_u_trace":       [1.0],
         "critic_entrywise_normalization": ['RMSProp'],
         "critic_beta2":         [0.999],
         "critic_sig_power":     [2],
         "critic_in_trace_sample_scaling":['False'],
         "seed":                 seeds,
+        "run_name":             ["-Obo_k20_rmsp__del_10sq_Abs___OboC_k2_rmsp"],
     })
 
 if False:  # Obo with large beta2
