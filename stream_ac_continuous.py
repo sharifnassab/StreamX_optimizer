@@ -672,8 +672,8 @@ if __name__ == '__main__':
         'Obonz':      shared_params + ['entrywise_normalization', 'beta2', 'u_trace', 'delta_clip', 'delta_norm', 'momentum'],
         'ObGDN':        shared_params + ['lr', 'delta_clip', 'delta_norm'],
         'ObGDm':        shared_params + ['lr', 'momentum'],
-        'Obo':         shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'delta_clip', 'delta_norm', 'momentum'],
-        'OboC':        shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'momentum'],
+        'Obo':         shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'delta_clip', 'delta_norm', 'momentum', 'u_trace'],
+        'OboC':        shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'momentum', 'u_trace'],
         }
 
     def build_spec(kind, args, required_optimizer_params) -> dict:

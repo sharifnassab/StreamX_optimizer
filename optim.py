@@ -4,13 +4,15 @@ from delta_clipper import delta_clipper
 
 
 class Obo(torch.optim.Optimizer): # same as Obn but also has delta_clipping
-    def __init__(self, params, lr=1.0, gamma=0.99, lamda=0.0, kappa=2.0, delta_clip='none', delta_norm='none', beta2=0.999, entrywise_normalization='none', sig_power=2, in_trace_sample_scaling=True, weight_decay=0.0, momentum=0.0):
+    def __init__(self, params, lr=1.0, gamma=0.99, lamda=0.0, kappa=2.0, delta_clip='none', delta_norm='none', beta2=0.999, entrywise_normalization='none', sig_power=2, in_trace_sample_scaling=True, weight_decay=0.0, momentum=0.0, u_trace=1.0):
         defaults = dict(lr=lr, gamma=gamma, lamda=lamda, beta2=beta2, beta_momentum=momentum)
         self.gamma = gamma
         self.lamda = lamda
         self.kappa = kappa
         self.weight_decay = weight_decay
         self.sig_power = sig_power
+        self.u_trace = u_trace
+        self.u_bar = 0.0
         self.sigma = 0.0
         self.t_val = 0
         self.entrywise_normalization = entrywise_normalization # 'none' or 'RMSprop' or 'RMSPropInTrace' (meaning z accumulates entrywised scaled grads)  (default: RMSProp)
@@ -62,7 +64,10 @@ class Obo(torch.optim.Optimizer): # same as Obn but also has delta_clipping
         self.sigma +=  (1-self.gamma*self.lamda) * (norm_grad**(self.sig_power/2.0)-self.sigma)
         norm_normalizer = ((self.sigma/(1-(self.gamma*self.lamda)**self.t_val)) + 1e-12) ** (1.0/self.sig_power)
         z_normalizer = math.sqrt(z_sum/(1-(self.gamma*self.lamda)**self.t_val))
-        dot_product =  self.kappa * norm_normalizer * z_normalizer
+        u = norm_normalizer * z_normalizer
+        self.u_bar +=  self.u_trace * (u-self.u_bar)
+        normalizer_ = max(u, math.sqrt(u*self.u_bar/(1-(1-self.u_trace)**self.t_val)))
+        dot_product =  self.kappa * normalizer_
         step_size = 1 / dot_product
         safe_delta = self.delta_clipper.clip_and_norm(delta)
         #print(delta, '\t', safe_delta)
@@ -155,12 +160,14 @@ class Obonz(torch.optim.Optimizer): # Ob with trace and no norm z
 
 
 class OboC(torch.optim.Optimizer): # same as Obn but also has delta_clipping
-    def __init__(self, params, lr=1.0, gamma=0.99, lamda=0.0, kappa=2.0,  beta2=0.999, entrywise_normalization='none', sig_power=2, in_trace_sample_scaling=True, weight_decay=0.0, momentum=0.0):
+    def __init__(self, params, lr=1.0, gamma=0.99, lamda=0.0, kappa=2.0,  beta2=0.999, entrywise_normalization='none', sig_power=2, in_trace_sample_scaling=True, weight_decay=0.0, momentum=0.0, u_trace=1.0):
         defaults = dict(lr=lr, gamma=gamma, lamda=lamda, beta2=beta2, beta_momentum=momentum)
         self.gamma = gamma
         self.lamda = lamda
         self.kappa = kappa
         self.sigma = 0.0
+        self.u_trace = u_trace
+        self.u_bar = 0.0
         self.weight_decay = weight_decay
         self.sig_power = sig_power
         self.t_val = 0
@@ -212,9 +219,12 @@ class OboC(torch.optim.Optimizer): # same as Obn but also has delta_clipping
         self.sigma +=  (1-self.gamma*self.lamda) * (norm_grad**(self.sig_power/2.0)-self.sigma)
         norm_normalizer = ((self.sigma/(1-(self.gamma*self.lamda)**self.t_val)) + 1e-16) ** (1.0/self.sig_power)
         z_normalizer = math.sqrt(z_sum/(1-(self.gamma*self.lamda)**self.t_val))
+        u = norm_normalizer * z_normalizer
+        self.u_bar +=  self.u_trace * (u-self.u_bar)
+        normalizer_ = max(u, math.sqrt(u*self.u_bar/(1-(1-self.u_trace)**self.t_val)))
         delta_bar = max(abs(delta), 1.0)
         #delta_bar = 1.0
-        dot_product = delta_bar * self.kappa * norm_normalizer * z_normalizer
+        dot_product = delta_bar * self.kappa * normalizer_
         step_size = 1 / dot_product
 
         for group in self.param_groups:
