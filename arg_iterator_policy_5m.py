@@ -3,9 +3,9 @@ from _slurm_generator import generate_slurm
 
 RESOURCE_DEFAULTS = {
     "account":  "def-sutton",
-    "max_time": "06:00:00",
+    "max_time": "10:00:00",
     "cpus":     1,
-    "mem":     '2G',
+    "mem":     '6G',
     "gpus":    '0',   #  v100:1,  0
     "constraint": "granite"    # this is a CPU type on Nibi
 }
@@ -439,7 +439,7 @@ if 0:   # momentum
         "seed":                 seeds,
     })
 
-if 1:   # momentum
+if False:   # momentum
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "critic_hidden_depth":  [2],
@@ -461,8 +461,51 @@ if 1:   # momentum
         "seed":                 seeds,
     })
 
+if 1:   # momentum
+    HYPER_SWEEPS.append({
+        "env_name":             environments,
+        "critic_hidden_depth":  [5],
+        "critic_hidden_width":  [512],
+        "critic_initialization_sparsity": [0.9],
+        "policy_optimizer":     ['ObGD'],
+        "policy_kappa":         [3], # 3 is optimum consistently
+        "policy_entropy_coeff": [0.01],
+        "policy_lamda":         [0.8],
+        "critic_optimizer":     ['OboC'],
+        "critic_lamda":         [0.8],
+        "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
+        "critic_momentum":      [0.9],
+        "critic_u_trace":       [0.01],
+        "critic_entrywise_normalization": ['RMSProp'],
+        "critic_beta2":         [0.999],
+        "critic_sig_power":     [2],
+        "critic_in_trace_sample_scaling":['False'],
+        "seed":                 seeds,
+    })
 
-if 1:  # delta normalization for policy
+if 1:   # momentum
+    HYPER_SWEEPS.append({
+        "env_name":             environments,
+        "critic_hidden_depth":  [2],
+        "critic_hidden_width":  [128],
+        "critic_initialization_sparsity": [0.0],
+        "policy_optimizer":     ['ObGD'],
+        "policy_kappa":         [3], # 3 is optimum consistently
+        "policy_entropy_coeff": [0.01],
+        "policy_lamda":         [0.8],
+        "critic_optimizer":     ['OboC'],
+        "critic_lamda":         [0.8],
+        "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
+        "critic_momentum":      [0.9],
+        "critic_u_trace":       [0.01],
+        "critic_entrywise_normalization": ['RMSProp'],
+        "critic_beta2":         [0.999],
+        "critic_sig_power":     [2],
+        "critic_in_trace_sample_scaling":['False'],
+        "seed":                 seeds,
+    })
+
+if False:  # Obo
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['Obo'],
@@ -490,7 +533,7 @@ if 1:  # delta normalization for policy
         "seed":                 seeds,
     })
 
-if 1:  # delta normalization for policy
+if False:  # Obo with large beta2
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['Obo'],
@@ -517,6 +560,9 @@ if 1:  # delta normalization for policy
         "critic_in_trace_sample_scaling":['False'],
         "seed":                 seeds,
     })
+
+
+
 
 if 0:  # sig power 1
     HYPER_SWEEPS.append({
