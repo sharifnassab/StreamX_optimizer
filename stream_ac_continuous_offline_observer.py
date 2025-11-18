@@ -108,13 +108,13 @@ class OfflineObserver(nn.Module):
     """
     def __init__(self, n_obs: int, observer_spec: dict):
         super().__init__()
-
+        
         self.observer_spec = dict(observer_spec or {})
         gamma_val = self.observer_spec.get('gamma', None)
         if gamma_val is None:
             raise ValueError("observer_spec must contain 'gamma' for OfflineObserver.")
         self.gamma_observer = float(gamma_val)
-
+        
         if self.observer_spec.get('optimizer', '').lower() == 'monte_carlo':
             self.is_monte_carlo = True
             self.observer_net = None
@@ -819,7 +819,7 @@ if __name__ == '__main__':
         'OboC': shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'momentum'],
         'Obo': shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'delta_clip', 'delta_norm', 'momentum'],
     }
-
+    
     def build_spec(kind, args, required_optimizer_params) -> dict:
         opt = getattr(args, f'{kind}_optimizer')
         required_params = required_optimizer_params.get(opt, [])

@@ -108,7 +108,7 @@ if 0: # ObnC policy    # was not good
     })
 
 
-if 1:  # network size
+if 0:  # network size
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_hidden_depth":  [5],

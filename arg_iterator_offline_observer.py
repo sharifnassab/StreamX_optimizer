@@ -3,9 +3,9 @@ from _slurm_generator import generate_slurm
 
 RESOURCE_DEFAULTS = {
     "account":  "def-sutton",
-    "max_time": "02:59:00",
+    "max_time": "04:59:00",
     "cpus":     1,
-    "mem":     '4G',
+    "mem":     '6G',
     "gpus":    '0',   #  v100:1,  0
     "constraint": "granite"    # this is a CPU type on Nibi
 }
@@ -72,6 +72,40 @@ for env_name in environments:
             "observer_lamda":         [0.8], 
         })
     
+
+    if 1: # no Sparse Init
+        HYPER_SWEEPS.append({
+            "env_name":               [env_name],
+            "dataset_name":           [dataset_name],
+            "dataset_path":           [dataset_path],
+            #
+            "observer_hidden_depth":  [2],
+            "observer_hidden_width":  [128],
+            "observer_initialization_sparsity": [0.0],
+            "seed":                   seeds,
+            #
+            "observer_optimizer":     ['ObGD'],
+            "observer_kappa":         [2.0],
+            "observer_lamda":         [0.8], 
+        })
+    
+
+    if 1: # ObGD larger net
+        HYPER_SWEEPS.append({
+            "env_name":               [env_name],
+            "dataset_name":           [dataset_name],
+            "dataset_path":           [dataset_path],
+            #
+            "observer_hidden_depth":  [5],
+            "observer_hidden_width":  [512],
+            "observer_initialization_sparsity": [0.9],
+            "seed":                   seeds,
+            #
+            "observer_optimizer":     ['ObGD'],
+            "observer_kappa":         [2.0],
+            "observer_lamda":         [0.8], 
+        })
+    
     if 0: 
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
@@ -93,7 +127,7 @@ for env_name in environments:
         })
 
     
-    if 1: # OboC
+    if 0: # OboC
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
             "dataset_name":           [dataset_name],
@@ -113,8 +147,8 @@ for env_name in environments:
             "observer_sig_power":     [2],
             "observer_in_trace_sample_scaling":['False'],
         })
-
-    if 1: # Obo
+    
+    if 0: # Obo
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
             "dataset_name":           [dataset_name],
@@ -135,7 +169,7 @@ for env_name in environments:
             "observer_in_trace_sample_scaling":['True'],
         })
 
-    if 1: # no momentum
+    if 0: # no momentum
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
             "dataset_name":           [dataset_name],
@@ -156,7 +190,7 @@ for env_name in environments:
             "observer_in_trace_sample_scaling":['False'],
         })
 
-    if 1: 
+    if 0: 
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
             "dataset_name":           [dataset_name],
@@ -181,7 +215,7 @@ for env_name in environments:
         
 
 
-    if 1: # larger net
+    if 1: # OboC larger net
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
             "dataset_name":           [dataset_name],
@@ -203,7 +237,7 @@ for env_name in environments:
         })
 
 
-    if 1: # no sparse init
+    if 0: # no sparse init
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
             "dataset_name":           [dataset_name],
@@ -224,7 +258,7 @@ for env_name in environments:
             "observer_in_trace_sample_scaling":['False'],
         })
 
-    if 1: # larger beta2
+    if 0: # larger beta2
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
             "dataset_name":           [dataset_name],
