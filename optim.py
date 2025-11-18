@@ -70,7 +70,7 @@ class Obo(torch.optim.Optimizer): # same as Obn but also has delta_clipping
         dot_product =  self.kappa * normalizer_
         step_size = 1 / dot_product
         safe_delta = self.delta_clipper.clip_and_norm(delta)
-        #print(delta, '\t', safe_delta)
+        #print(abs(safe_delta), safe_delta/delta)
 
         for group in self.param_groups:
             for p in group["params"]:

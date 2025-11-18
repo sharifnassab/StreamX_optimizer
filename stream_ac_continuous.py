@@ -485,6 +485,7 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
         ep_policy_std += float(step_info.get('policy', {}).get('std_mean', 0.0))
 
         if terminated or truncated:
+            #print(f"{max([abs(x) for x in list_policy_delta_used]):.2f}", '\t', f"{sum([abs(x) for x in list_policy_delta_used])/len(list_policy_delta_used):.2f}", '\t', f"{np.sqrt(sum([x**2 for x in list_policy_delta_used])/len(list_policy_delta_used)):.2f}")
             if agent.observer_exists:
                 ep_pred_error = compute_prediction_MSE(list_ep_R, list_ep_v['observer'], agent.gamma_observer)
                 ep_pred_error_end_of_episode_W = compute_prediction_MSE_end_of_episode_W(list_ep_R, list_ep_S, agent.observer_net, agent.gamma_observer)

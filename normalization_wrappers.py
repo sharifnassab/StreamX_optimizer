@@ -40,6 +40,7 @@ class NormalizeObservation(gym.Wrapper, gym.utils.RecordConstructorArgs):
 
     def step(self, action):
         obs, rews, terminateds, truncateds, infos = self.env.step(action)
+        infos['obs_original'] = obs
         if self.is_vector_env:
             obs = self.normalize(obs)
         else:
@@ -48,6 +49,7 @@ class NormalizeObservation(gym.Wrapper, gym.utils.RecordConstructorArgs):
 
     def reset(self, **kwargs):
         obs, info = self.env.reset(**kwargs)
+        info['obs_original'] = obs
         if self.is_vector_env:
             return self.normalize(obs), info
         else:

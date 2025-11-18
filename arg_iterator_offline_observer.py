@@ -3,9 +3,9 @@ from _slurm_generator import generate_slurm
 
 RESOURCE_DEFAULTS = {
     "account":  "def-sutton",
-    "max_time": "04:59:00",
+    "max_time": "12:59:00",
     "cpus":     1,
-    "mem":     '6G',
+    "mem":     '10G',
     "gpus":    '0',   #  v100:1,  0
     "constraint": "granite"    # this is a CPU type on Nibi
 }
@@ -73,7 +73,7 @@ for env_name in environments:
         })
     
 
-    if 1: # no Sparse Init
+    if 0: # no Sparse Init
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
             "dataset_name":           [dataset_name],
@@ -90,7 +90,7 @@ for env_name in environments:
         })
     
 
-    if 1: # ObGD larger net
+    if 0: # ObGD larger net
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
             "dataset_name":           [dataset_name],
@@ -231,7 +231,7 @@ for env_name in environments:
             "observer_kappa":         [2.0], 
             "observer_momentum":      [0.9], 
             "observer_entrywise_normalization": ['RMSProp', 'none'],
-            "observer_beta2":         [0.999],
+            "observer_beta2":         [0.99901],
             "observer_sig_power":     [2],
             "observer_in_trace_sample_scaling":['False'],
         })
