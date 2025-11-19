@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH --account=def-sutton
-#SBATCH --time=02:59:00
+#SBATCH --time=06:00:00
 #SBATCH --cpus-per-task=1
-#SBATCH --mem=3072M
-#SBATCH --array=1-10
-#SBATCH --output=/home/asharif/scratch/StreamX_optimizer/outputs/2025_11_18__18_23_56__test0/3_0/output_%j.txt
+#SBATCH --mem=2048M
+#SBATCH --array=1-150
+#SBATCH --output=/home/asharif/scratch/StreamX_optimizer/outputs/2025_11_18__18_36_46__test0/3_0/output_%j.txt
 #SBATCH --constraint=granite
 
 module purge
@@ -16,7 +16,7 @@ source ~/venv_streamx/bin/activate
 export PYTHONNOUSERSITE=1
 
 
-$(sed -n "${SLURM_ARRAY_TASK_ID}p" < /home/asharif/scratch/StreamX_optimizer/outputs/2025_11_18__18_23_56__test0/export_3_0.dat)
+$(sed -n "${SLURM_ARRAY_TASK_ID}p" < /home/asharif/scratch/StreamX_optimizer/outputs/2025_11_18__18_36_46__test0/export_3_0.dat)
 echo "Task ${SLURM_ARRAY_TASK_ID} started on $(hostname) at $(date)"
-python3 stream_ac_continuous_offline_observer.py --total_steps=$total_steps --log_backend=$log_backend --log_dir=$log_dir --log_dir_for_pickle=$log_dir_for_pickle --project=$project --log_freq=$log_freq --bin_size=$bin_size --env_name=$env_name --dataset_name=$dataset_name --dataset_path=$dataset_path --observer_hidden_depth=$observer_hidden_depth --observer_hidden_width=$observer_hidden_width --observer_initialization_sparsity=$observer_initialization_sparsity --seed=$seed --observer_optimizer=$observer_optimizer --observer_lamda=$observer_lamda --observer_kappa=$observer_kappa --observer_momentum=$observer_momentum --observer_delta_clip=$observer_delta_clip --observer_delta_norm=$observer_delta_norm --observer_entrywise_normalization=$observer_entrywise_normalization --observer_beta2=$observer_beta2 --observer_sig_power=$observer_sig_power --observer_in_trace_sample_scaling=$observer_in_trace_sample_scaling --max_time=$max_time --uID=$uID
+python3 stream_ac_continuous.py --total_steps=$total_steps --policy_gamma=$policy_gamma --policy_lr=$policy_lr --critic_kappa=$critic_kappa --critic_entrywise_normalization=$critic_entrywise_normalization --critic_beta2=$critic_beta2 --critic_gamma=$critic_gamma --critic_lr=$critic_lr --observer_optimizer=$observer_optimizer --log_backend=$log_backend --log_dir=$log_dir --log_dir_for_pickle=$log_dir_for_pickle --logging_level=$logging_level --project=$project --env_name=$env_name --policy_optimizer=$policy_optimizer --policy_lamda=$policy_lamda --policy_kappa=$policy_kappa --policy_momentum=$policy_momentum --policy_u_trace=$policy_u_trace --policy_entrywise_normalization=$policy_entrywise_normalization --policy_beta2=$policy_beta2 --policy_delta_clip=$policy_delta_clip --policy_delta_norm=$policy_delta_norm --policy_sig_power=$policy_sig_power --policy_in_trace_sample_scaling=$policy_in_trace_sample_scaling --policy_entropy_coeff=$policy_entropy_coeff --policy_weight_decay=$policy_weight_decay --critic_optimizer=$critic_optimizer --critic_lamda=$critic_lamda --critic_momentum=$critic_momentum --critic_u_trace=$critic_u_trace --critic_sig_power=$critic_sig_power --critic_in_trace_sample_scaling=$critic_in_trace_sample_scaling --seed=$seed --max_time=$max_time --uID=$uID
 echo "Program test finished with exit code $? at: `date`"
