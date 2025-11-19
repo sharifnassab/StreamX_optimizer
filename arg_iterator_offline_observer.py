@@ -3,9 +3,9 @@ from _slurm_generator import generate_slurm
 
 RESOURCE_DEFAULTS = {
     "account":  "def-sutton",
-    "max_time": "12:59:00",
+    "max_time": "02:59:00",
     "cpus":     1,
-    "mem":     '10G',
+    "mem":     '3G',
     "gpus":    '0',   #  v100:1,  0
     "constraint": "granite"    # this is a CPU type on Nibi
 }
@@ -169,7 +169,7 @@ for env_name in environments:
             "observer_in_trace_sample_scaling":['True'],
         })
 
-    if 0: # no momentum
+    if 1: # OboC larger lambda
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
             "dataset_name":           [dataset_name],
@@ -181,16 +181,16 @@ for env_name in environments:
             "seed":                   seeds,
             #
             "observer_optimizer":     ['OboC'],
-            "observer_lamda":         [0.8], 
+            "observer_lamda":         [0.9], 
             "observer_kappa":         [2.0], 
-            "observer_momentum":      [0.0], 
-            "observer_entrywise_normalization": ['RMSProp', 'none'],
+            "observer_momentum":      [0.9], 
+            "observer_entrywise_normalization": ['RMSProp'],
             "observer_beta2":         [0.999],
             "observer_sig_power":     [2],
             "observer_in_trace_sample_scaling":['False'],
         })
 
-    if 0: 
+    if 1: 
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
             "dataset_name":           [dataset_name],
@@ -205,7 +205,7 @@ for env_name in environments:
             "observer_lamda":         [0.8], 
             "observer_kappa":         [2.0], 
             "observer_momentum":      [0.0], 
-            "observer_delta_clip":    ['10_avg_sq_max_10avg__dec_0.9998'],
+            "observer_delta_clip":    ['none', '20_avg_sq_max_20avg__dec_0.9998'], # '10_avg_sq_max_10avg__dec_0.9998'
             "observer_delta_norm":    ['none'],
             "observer_entrywise_normalization": ['RMSProp'],
             "observer_beta2":         [0.999],
@@ -215,7 +215,7 @@ for env_name in environments:
         
 
 
-    if 1: # OboC larger net
+    if 0: # OboC larger net
         HYPER_SWEEPS.append({
             "env_name":               [env_name],
             "dataset_name":           [dataset_name],
@@ -231,7 +231,7 @@ for env_name in environments:
             "observer_kappa":         [2.0], 
             "observer_momentum":      [0.9], 
             "observer_entrywise_normalization": ['RMSProp', 'none'],
-            "observer_beta2":         [0.99901],
+            "observer_beta2":         [0.999],
             "observer_sig_power":     [2],
             "observer_in_trace_sample_scaling":['False'],
         })
