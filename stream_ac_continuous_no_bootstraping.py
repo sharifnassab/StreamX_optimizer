@@ -290,19 +290,18 @@ class StreamAC(nn.Module):
         it = iter(v_grads_flat)
         return [[next(it) for _ in grp] for grp in value_params_grouped]
 
-    def update_params(self, s, a, r, s_prime, terminated, truncated):
-        terminated_mask = 0 if terminated else 1 
-        done = 1 if terminated or truncated else 0
+    def update_params(self, s, a, r, s_prime, done):
+        done_mask = 0 if done else 1
         s = torch.tensor(np.array(s), dtype=torch.float)
         a = torch.tensor(np.array(a), dtype=torch.float)
         r = torch.tensor(np.array(r), dtype=torch.float)
         s_prime = torch.tensor(np.array(s_prime), dtype=torch.float)
-        terminated_mask_t = torch.tensor(np.array(terminated_mask), dtype=torch.float)
+        done_mask_t = torch.tensor(np.array(done_mask), dtype=torch.float)
 
         v_s, v_prime = self.v(s), self.v(s_prime)
 
-        td_target_critic = r + self.gamma_critic * v_prime * terminated_mask_t
-        td_target_policy = r + self.gamma_policy * v_prime * terminated_mask_t
+        td_target_critic = r + self.gamma_critic * v_prime * done_mask_t
+        td_target_policy = r + self.gamma_policy * v_prime * done_mask_t
         delta_critic = td_target_critic - v_s
         delta_policy = td_target_policy - v_s
 
@@ -328,7 +327,7 @@ class StreamAC(nn.Module):
         if self.observer_exists:
             v_s_obs, v_prime_obs = self.v_observer(s), self.v_observer(s_prime)
             (-v_s_obs).backward()
-            delta_obs = r + self.gamma_observer * v_prime_obs * terminated_mask_t - v_s_obs
+            delta_obs = r + self.gamma_observer * v_prime_obs * done_mask_t - v_s_obs
             info_observer = self.optimizer_observer.step(delta_obs.item(), reset=done)
             # For logging:
             info_observer = {**(info_observer or {}),
@@ -348,6 +347,15 @@ class StreamAC(nn.Module):
             "td_error": float(delta_critic.item()),
             "v(s)": float(v_s.item()),
         }
+        
+        # Optional overshooting check
+        if False: #if self.overshooting_info:
+            v_s2 = self.v(s)
+            v_prime2 = self.v(s_prime)
+            td_target2 = r + self.gamma * v_prime2 * done_mask_t
+            delta_bar = td_target2 - v_s2
+            if torch.sign(delta_bar * delta).item() == -1:
+                print("Overshooting Detected!")
 
         return  {'policy':info_policy, 'critic':info_critic, 'observer':info_observer}
 
@@ -400,7 +408,7 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
     )
 
     # ---- Logging ----
-    run_name = (f'{env.spec.id}__bs____-Policy_{spec_to_name(policy_spec)}____-Critic_{spec_to_name(critic_spec)}' +
+    run_name = (f'{env.spec.id}____-Policy_{spec_to_name(policy_spec)}____-Critic_{spec_to_name(critic_spec)}' +
                 (f'____-Observer_{spec_to_name(observer_spec)}' if agent.observer_exists else '') + 
                 (f"____{logging_spec.get('run_name', '')}" if (logging_spec.get('run_name', '')!='') else ''))
     config = {
@@ -450,7 +458,7 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
         list_ep_R.append(r)
         list_ep_S.append(s)
 
-        step_info = agent.update_params(s, a, r, s_prime, terminated, truncated,)
+        step_info = agent.update_params(s, a, r, s_prime, (terminated or truncated),)
         s = s_prime
 
         for net in ['critic', 'observer']:

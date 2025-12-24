@@ -35,7 +35,7 @@ COMMON_ENV = {
     "log_dir":              "/home/asharif/scratch/StreamX_optimizer/WandB_offline", #"/home/asharif/StreamX_optimizer/WandB_offline",
     "log_dir_for_pickle":   "/home/asharif/scratch/StreamX_optimizer/Pickles",
     "logging_level":        "light",      # "light" , "heavy"
-    "project":              "StreamX_OptDesign_policy_5m",
+    "project":              "StreamX_OptDesign_policy_5m_bootstrap",
 }
 
 
@@ -48,19 +48,19 @@ run_description = 'test0'
 
 HYPER_SWEEPS = []
 
-environments = ['Ant-v5', 'HalfCheetah-v5', 'Hopper-v5', 'Walker2d-v5', 'Humanoid-v5']
+environments = ['Ant-v5', 'HalfCheetah-v5', 'Hopper-v5', 'Walker2d-v5', 'Humanoid-v5', 'HumanoidStandup-v5']
 seeds = [i for i in range(30)]
 
 
-if 0: 
+if 1: 
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['ObGD'],
-        "policy_kappa":         [3,2,1], # 3 is optimum consistently
+        "policy_kappa":         [3], # 3 is optimum consistently
         "policy_entropy_coeff": [0.01],
         "policy_lamda":         [0.0],
         "critic_lamda":         [0.0],
-        "critic_optimizer":     ['ObGD', 'ObnC'],   # ['ObGD', 'AdaptiveObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC'],
+        "critic_optimizer":     ['ObGD'],   # ['ObGD', 'AdaptiveObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC'],
         "seed":                 seeds,
     })
 
@@ -516,7 +516,7 @@ if False:  # Obo
     })
 
 
-if 1:  # Obo with a different delta_clip
+if 0:  # Obo with a different delta_clip
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['Obo'],
@@ -545,7 +545,7 @@ if 1:  # Obo with a different delta_clip
         #"run_name":             ["-Obo_k20_rmsp__del_10sq_Abs___OboC_k2_rmsp"],
     })
 
-if 1:  # Obo - Obo
+if 1:  # Obo - Obo (standard)
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['Obo'],
@@ -555,7 +555,7 @@ if 1:  # Obo - Obo
         "policy_u_trace":       [1],
         "policy_entrywise_normalization": ['RMSProp'],
         "policy_beta2":         [0.999],
-        "policy_delta_clip":    ['10_avg_sq_max_10avg__dec_0.9998', '20_avg_sq_max_20avg__dec_0.9998'],
+        "policy_delta_clip":    ['20_avg_sq_max_20avg__dec_0.9998'],
         "policy_delta_norm":    ['.9998clipAbs'],
         "policy_sig_power":     [2],
         "policy_in_trace_sample_scaling":['False'],
@@ -566,7 +566,7 @@ if 1:  # Obo - Obo
         "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
         "critic_momentum":      [0.9],
         "critic_u_trace":       [1.0],
-        "critic_delta_clip":    ['20_avg_sq_max_20avg__dec_0.9998', 'none'],
+        "critic_delta_clip":    ['20_avg_sq_max_20avg__dec_0.9998'],
         "critic_entrywise_normalization": ['RMSProp'],
         "critic_beta2":         [0.999],
         "critic_sig_power":     [2],
@@ -577,7 +577,7 @@ if 1:  # Obo - Obo
 
 
 
-if 1:  # Obo larger lambda
+if 0:  # Obo larger lambda
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['Obo'],
@@ -759,7 +759,7 @@ if 0:  # delta normalization for policy
         "seed":                 seeds,
     })
 
-if 1:  # Obonz 
+if 0:  # Obonz 
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['Obonz'],
