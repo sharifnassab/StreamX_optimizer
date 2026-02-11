@@ -136,9 +136,9 @@ class OboMetaOpt(torch.optim.Optimizer):
 
     def step(self, delta, reset=False):
         safe_delta = self.delta_clipper.clip_and_norm(delta)
+        self.t_val += 1
 
         # meta update
-        self.t_val += 1
         if self.t_val>=2:
             meta_grad = 0.0
             for group in self.param_groups:
@@ -211,6 +211,88 @@ class OboMetaOpt(torch.optim.Optimizer):
 
                 p.data.add_(delta_w, alpha=eta)
                 h.data.add_(delta_w)
+
+                if reset:
+                    e.zero_()
+
+        info = {'clipped_step_size':step_size, 'delta':delta, 'delta_used':safe_delta, 'abs_delta':abs(delta), 'norm2_eligibility_trace':z_sum}
+        return info
+
+
+class OboBase(torch.optim.Optimizer): 
+    def __init__(self, params, lr=1.0, gamma=0.99, lamda=0.0, kappa=2.0, delta_clip='none', delta_norm='none', beta2=0.999, entrywise_normalization='none', 
+                 weight_decay=0.0, momentum=0.0):
+        defaults = dict(lr=lr, gamma=gamma, lamda=lamda, beta2=beta2, beta_momentum=momentum)
+        self.gamma = gamma
+        self.lamda = lamda
+        self.eta = torch.tensor(1.0/kappa)
+        self.weight_decay = weight_decay
+        self.u_bar = 0.0
+        self.sigma = 0.0
+        self.t_val = 0
+        self.delta_norm=delta_norm
+        self.entrywise_normalization = entrywise_normalization # 'none' or 'RMSprop' or 'RMSPropInTrace' (meaning z accumulates entrywised scaled grads)  (default: RMSProp)
+        self.delta_clipper = delta_clipper(clip_type=delta_clip, normalization_type=delta_norm)
+        # Meta parameters:
+        self.v_meta = 1.0
+        super(OboBase, self).__init__(params, defaults)
+
+    def step(self, delta, reset=False):
+        safe_delta = self.delta_clipper.clip_and_norm(delta)
+        self.t_val += 1
+
+        # base update
+        norm_grad = 0
+        z_sum = 0.0
+        for group in self.param_groups:
+            for p in group["params"]:
+                state = self.state[p]
+                if len(state) == 0:
+                    state["entrywise_squared_grad"] = torch.ones_like(p.data)
+                v = state["entrywise_squared_grad"]
+                if "eligibility_trace" not in state:
+                    state["eligibility_trace"] = torch.zeros_like(p.data)
+                e = state["eligibility_trace"]
+                
+                if self.entrywise_normalization.lower() in ['rmsprop']:
+                    v.mul_(group["beta2"]).addcmul_(p.grad, p.grad, value=1.0 - group["beta2"])
+                    v_hat = (v / (1.0 - group["beta2"] ** self.t_val)).sqrt() + 1e-8
+                    state["rmsprop_v_hat"] = v_hat
+                elif self.entrywise_normalization.lower()=='none':
+                    v_hat = 1.0
+                e.mul_(group["gamma"] * group["lamda"]).add_(p.grad)
+                z_sum += ((e.square() / v_hat).sum()).abs().item()
+                norm_grad += ((p.grad.square() / v_hat).sum()).abs().item()
+        
+        self.sigma +=  (1-self.gamma*self.lamda) * (norm_grad-self.sigma)
+        norm_normalizer = math.sqrt((self.sigma/(1-(self.gamma*self.lamda)**self.t_val)) + 1e-12) 
+        z_normalizer = math.sqrt(z_sum/(1-(self.gamma*self.lamda)**self.t_val))
+        normalizer_ = norm_normalizer * z_normalizer
+        step_size = 1 / normalizer_
+
+        for group in self.param_groups:
+            for p in group["params"]:
+                state = self.state[p]
+                e = state["eligibility_trace"]
+                if group["beta_momentum"]>0:
+                    if "momentum" not in state:
+                        state["momentum"] = torch.zeros_like(p.data)
+                    m = state["momentum"]
+                    if self.entrywise_normalization.lower() == 'rmsprop':
+                        m.mul_(group["beta_momentum"]).addcdiv_(e, state["rmsprop_v_hat"], value= safe_delta * step_size * (1-group["beta_momentum"]))
+                    else:
+                        m.mul_(group["beta_momentum"]).add_(e, alpha= safe_delta * step_size * (1-group["beta_momentum"]))
+                    delta_w = m
+                else:
+                    if self.entrywise_normalization.lower() == 'rmsprop':
+                        delta_w = safe_delta * step_size * e / state["rmsprop_v_hat"]
+                    else:
+                        delta_w = safe_delta * step_size * e
+
+                if self.weight_decay > 0.0:
+                    p.data.mul_(1.0-self.eta*self.weight_decay)
+
+                p.data.add_(delta_w, alpha=self.eta)
 
                 if reset:
                     e.zero_()

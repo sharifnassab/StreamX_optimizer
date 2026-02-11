@@ -3,7 +3,7 @@ from _slurm_generator import generate_slurm
 
 RESOURCE_DEFAULTS = {
     "account":  "def-sutton",
-    "max_time": "02:00:00", # *****
+    "max_time": "06:00:00",
     "cpus":     1,
     "mem":     '2G',
     "gpus":    '0',   #  v100:1,  0
@@ -18,8 +18,8 @@ RESOURCE_OVERRIDES = {
 PYTHON_ENTRYPOINT = "stream_ac_continuous_meta.py"
 
 COMMON_ENV = {
-    #"env_name":         "Ant-v5",
-    "total_steps":      1_000_000, # *****
+    #"env_name":            "Ant-v5",
+    "total_steps":          5_000_000,
     #
     "policy_gamma":         0.99,
     "policy_entropy_coeff": 0.01,
@@ -42,7 +42,7 @@ COMMON_ENV = {
     "log_dir":              "/home/asharif/scratch/StreamX_optimizer/WandB_offline", #"/home/asharif/StreamX_optimizer/WandB_offline",
     "log_dir_for_pickle":   "/home/asharif/scratch/StreamX_optimizer/Pickles",
     "logging_level":        "light",      # "light" , "heavy"
-    "project":              "StreamX_OptDesign_meta_5m_temp", # *****
+    "project":              "StreamX_OptDesign_meta_5m",
 }
 
 
@@ -55,8 +55,8 @@ run_description = 'test0'
 
 HYPER_SWEEPS = []
 
-environments = ['Ant-v5', 'HalfCheetah-v5'] # *****, 'Hopper-v5', 'Walker2d-v5', 'Humanoid-v5', 'HumanoidStandup-v5']
-seeds = [i for i in range(3)] # *****
+environments = ['Ant-v5', 'HalfCheetah-v5', 'Hopper-v5', 'Walker2d-v5', 'Humanoid-v5', 'HumanoidStandup-v5']
+seeds = [i for i in range(10)] # *****
 
 
 if False:  # ObGD - ObGD (standard)
@@ -72,7 +72,58 @@ if False:  # ObGD - ObGD (standard)
         "seed":                 seeds,
     })
 
-if True:  # Obo - Obo (standard)
+if True:  # Ob - Obo (standard)
+    HYPER_SWEEPS.append({
+        "env_name":             environments,
+        "policy_optimizer":     ['OboBase'],
+        "policy_lamda":         [0.8],
+        "policy_kappa":         [20],
+        #
+        "critic_optimizer":     ['OboBase'],
+        "critic_lamda":         [0.8],
+        "critic_kappa":         [2.0],
+        "seed":                 seeds,
+        ##"run_name":             [""],
+    })
+
+
+if True:  # ObMetaOpt - Obo (standard)
+    HYPER_SWEEPS.append({
+        "env_name":             environments,
+        "policy_optimizer":     ['OboMetaOpt'],
+        "policy_lamda":         [0.0, 0.8],
+        "policy_kappa":         [20],
+        "policy_meta_stepsize": [1e-3],
+        "policy_beta2_meta":    [0.999],
+        "policy_stepsize_parameterization": ['exp'],
+        "policy_h_decay_meta":  [0.9999, .999, .99, .0],
+        #
+        "critic_optimizer":     ['OboBase'],
+        "critic_lamda":         [0.8],
+        "critic_kappa":         [2.0],
+        "seed":                 seeds,
+        ##"run_name":             [""],
+    })
+
+if True:  # Obo - OboMetaOpt (standard)
+    HYPER_SWEEPS.append({
+        "env_name":             environments,
+        "policy_optimizer":     ['OboBase'],
+        "policy_lamda":         [0.8],
+        "policy_kappa":         [20],
+        #
+        "critic_optimizer":     ['OboMetaOpt'],
+        "critic_lamda":         [0.0, 0.8],
+        "critic_kappa":         [2.0],
+        "critic_meta_stepsize": [1e-3],
+        "critic_beta2_meta":    [0.999],
+        "critic_stepsize_parameterization": ['exp'],
+        "critic_h_decay_meta":  [0.9999, .999, .99, .0],
+        "seed":                 seeds,
+        ##"run_name":             [""],
+    })
+
+if False:  # Obo - Obo (standard)
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['OboMetaOpt'],
@@ -91,7 +142,7 @@ if True:  # Obo - Obo (standard)
         "critic_stepsize_parameterization": ['exp'],
         "critic_h_decay_meta":  [0.9999],
         "seed":                 seeds,
-        ##"run_name":             ["-Obo_k20_rmsp__del_10sq_Abs___Obo_k2_rmsp"],
+        ##"run_name":             [""],
     })
 
 

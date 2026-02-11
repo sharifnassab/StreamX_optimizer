@@ -28,6 +28,7 @@ from optim import Obtm as Obtm_Optimizer
 from optim import Obonz as Obonz_Optimizer
 from optim import Obo as Obo_Optimizer
 from optim import OboC as OboC_Optimizer
+from optim import OboBase as OboBase_Optimizer
 from optim import OboMetaOpt as OboMetaOpt_Optimizer
 from time_wrapper import AddTimeInfo
 from normalization_wrappers import NormalizeObservation, ScaleReward
@@ -277,6 +278,12 @@ class StreamAC(nn.Module):
                 params, gamma=gamma, lamda=lamda, kappa=kappa, weight_decay=weight_decay, sig_power=sig_power, momentum=momentum, 
                 entrywise_normalization=entrywise_normalization, beta2=beta2, in_trace_sample_scaling=in_trace_sample_scaling
             )
+        if opt_name == 'obobase':
+            return OboBase_Optimizer(
+                params, gamma=gamma, lamda=lamda, kappa=kappa,  weight_decay=weight_decay, delta_clip=delta_clip,  delta_norm=delta_norm, momentum=momentum,
+                entrywise_normalization=entrywise_normalization, beta2=beta2
+            )
+        
         if opt_name == 'obometaopt':
             return OboMetaOpt_Optimizer(
                 params, gamma=gamma, lamda=lamda, kappa=kappa,  weight_decay=weight_decay, delta_clip=delta_clip,  delta_norm=delta_norm, momentum=momentum,
@@ -601,7 +608,7 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
 
 
 if __name__ == '__main__':
-    optimizer_choices = ['ObGD', 'Obo', 'OboMetaOpt', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD', 'ObtC', 'ObtN', 'Obt', 'Obtnnz', 'Obonz', 'ObGDN', 'ObGDm', 'ObtCm', 'Obtm', 'OboC']
+    optimizer_choices = ['ObGD', 'Obo', 'OboBase', 'OboMetaOpt', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD', 'ObtC', 'ObtN', 'Obt', 'Obtnnz', 'Obonz', 'ObGDN', 'ObGDm', 'ObtCm', 'Obtm', 'OboC']
     parser = argparse.ArgumentParser(description='Stream AC(λ)')
     parser.add_argument('--env_name', type=str, default='Ant-v5')  # HalfCheetah-v4
     parser.add_argument('--seed', type=int, default=0)
@@ -716,6 +723,7 @@ if __name__ == '__main__':
         'ObGDm':        shared_params + ['lr', 'momentum'],
         'Obo':          shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'delta_clip', 'delta_norm', 'momentum', 'u_trace'],
         'OboC':         shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'momentum', 'u_trace'],
+        'OboBase':      shared_params + ['entrywise_normalization', 'beta2', 'delta_clip', 'delta_norm', 'momentum'],
         'OboMetaOpt':   shared_params + ['entrywise_normalization', 'beta2', 'delta_clip', 'delta_norm', 'momentum'] + ['meta_stepsize', 'beta2_meta', 'stepsize_parameterization', 'h_decay_meta'],
         }
     
