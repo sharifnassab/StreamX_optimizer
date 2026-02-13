@@ -42,7 +42,7 @@ COMMON_ENV = {
     "log_dir":              "/home/asharif/scratch/StreamX_optimizer/WandB_offline", #"/home/asharif/StreamX_optimizer/WandB_offline",
     "log_dir_for_pickle":   "/home/asharif/scratch/StreamX_optimizer/Pickles",
     "logging_level":        "light",      # "light" , "heavy"
-    "project":              "StreamX_OptDesign_metaZero_5m_temp",
+    "project":              "StreamX_OptDesign_metaZero_5m_temp2",
 }
 
 
@@ -87,10 +87,10 @@ if True:  # Ob - Obo (standard)
     })
 
 
-if True:  # ObMetaOpt - Obo (standard)
+if True:  # OboMetaZero - Obo (standard)
     HYPER_SWEEPS.append({
         "env_name":             environments,
-        "policy_optimizer":     ['OboMetaOpt'],
+        "policy_optimizer":     ['OboMetaZero'],
         "policy_lamda":         [0.8],
         "policy_kappa":         [20],
         "policy_meta_stepsize": [1e-3],
@@ -106,10 +106,10 @@ if True:  # ObMetaOpt - Obo (standard)
         ##"run_name":             [""],
     })
 
-if True:  # ObMetaOpt - Obo (standard)
+if True:  # OboMetaZero - Obo (standard)
     HYPER_SWEEPS.append({
         "env_name":             environments,
-        "policy_optimizer":     ['OboMetaOpt'],
+        "policy_optimizer":     ['OboMetaZero'],
         "policy_lamda":         [0.8],
         "policy_kappa":         [20],
         "policy_meta_stepsize": [1e-4],
@@ -126,14 +126,14 @@ if True:  # ObMetaOpt - Obo (standard)
     })
     
 
-if True:  # Obo - OboMetaOpt (standard)
+if True:  # Obo - OboMetaZero (standard)
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['OboBase'],
         "policy_lamda":         [0.8],
         "policy_kappa":         [20],
         #
-        "critic_optimizer":     ['OboMetaOpt'],
+        "critic_optimizer":     ['OboMetaZero'],
         "critic_lamda":         [0.8],
         "critic_kappa":         [2.0],
         "critic_meta_stepsize": [1e-3],
@@ -146,14 +146,14 @@ if True:  # Obo - OboMetaOpt (standard)
         ##"run_name":             [""],
     })
 
-if True:  # Obo - OboMetaOpt (standard)
+if True:  # Obo - OboMetaZero (standard)
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['OboBase'],
         "policy_lamda":         [0.8],
         "policy_kappa":         [20],
         #
-        "critic_optimizer":     ['OboMetaOpt'],
+        "critic_optimizer":     ['OboMetaZero'],
         "critic_lamda":         [0.8],
         "critic_kappa":         [2.0],
         "critic_meta_stepsize": [1e-4],
@@ -167,14 +167,14 @@ if True:  # Obo - OboMetaOpt (standard)
     })
 
 
-if True:  # Obo - OboMetaOpt (standard)
+if True:  # Obo - OboMetaZero (standard)
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['OboBase'],
         "policy_lamda":         [0.8],
         "policy_kappa":         [20],
         #
-        "critic_optimizer":     ['OboMetaOpt'],
+        "critic_optimizer":     ['OboMetaZero'],
         "critic_lamda":         [0.8],
         "critic_kappa":         [2.0],
         "critic_meta_stepsize": [0.1],
@@ -188,14 +188,14 @@ if True:  # Obo - OboMetaOpt (standard)
     })
 
 
-if True:  # Obo - OboMetaOpt (standard)
+if True:  # Obo - OboMetaZero (standard)
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['OboBase'],
         "policy_lamda":         [0.8],
         "policy_kappa":         [20],
         #
-        "critic_optimizer":     ['OboMetaOpt'],
+        "critic_optimizer":     ['OboMetaZero'],
         "critic_lamda":         [0.8],
         "critic_kappa":         [2.0],
         "critic_meta_stepsize": [0.02],
