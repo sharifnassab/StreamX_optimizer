@@ -380,9 +380,6 @@ class StreamAC(nn.Module):
             info_policy = self.optimizer_policy.step(delta_policy.item(), reset=done)
 
 
-
-        
-
         # observer update:
         if self.observer_exists: 
             self.optimizer_observer.zero_grad()
@@ -483,6 +480,7 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
         run_name=run_name+f'__seed{seed}',
         config=config,
     )
+    logger.log({'time/time': np.round((time.time() - start_time)/3600,2)}, step=0)
     logging_level = logging_spec.get('level')
     if logging_level in ['heavy']:
         logger.watch([agent.policy_net, agent.critic_net], log="all")  # no-op for TB
@@ -537,6 +535,9 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
         ep_steps += 1
         ep_min_inv_M_sum += float(step_info.get('policy', {}).get('min_inv_M', 0.0))
         ep_policy_std += float(step_info.get('policy', {}).get('std_mean', 0.0))
+
+        if t%1_000_000==0:
+            logger.log({'time/time': np.round((time.time() - start_time)/3600,2)}, step=t)
 
         if terminated or truncated:
             #print(f"{max([abs(x) for x in list_policy_delta_used]):.2f}", '\t', f"{sum([abs(x) for x in list_policy_delta_used])/len(list_policy_delta_used):.2f}", '\t', f"{np.sqrt(sum([x**2 for x in list_policy_delta_used])/len(list_policy_delta_used)):.2f}")

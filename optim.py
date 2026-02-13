@@ -93,16 +93,14 @@ class OboMetaZero():
             meta_grad = (error_shadow-error_main)/self.epsilon_meta
             self.v_meta =  self.v_meta + ((1-self.beta2_meta)/(1-self.beta2_meta**(self.t_meta-1))) * (meta_grad**2 - self.v_meta) 
             self.zeta = self.zeta - self.meta_stepsize * meta_grad / (math.sqrt(self.v_meta) + 1e-8)
-
-            # regularization to pull shadow netwrok toward main network
             
-            #self.zeta -= 0.01*self.meta_stepsize   # regularization for when it is indecisive
+            #self.zeta -= 0.01*self.meta_stepsize   # regularization for when meta is indecisive
 
         self.eta = self.stepsize_parameterization(self.zeta)
         self.optimizer.eta = self.eta
         self.optimizer_shadow.eta = self.stepsize_parameterization(self.zeta + self.epsilon_meta)
         
-        if self.shadow_distance_regulizer_coeff>0:
+        if self.shadow_distance_regulizer_coeff>0: # regularization to pull shadow netwrok toward main network
             with torch.no_grad():
                 for param, param_shadow in zip(self.net.parameters(), self.net_shadow.parameters()):
                     param_shadow.add_(param.data - param_shadow.data, alpha=self.shadow_distance_regulizer_coeff)
