@@ -3,7 +3,7 @@ from _slurm_generator import generate_slurm
 
 RESOURCE_DEFAULTS = {
     "account":  "def-sutton",
-    "max_time": "15:00:00",
+    "max_time": "06:00:00",
     "cpus":     1,
     "mem":     '2G',
     "gpus":    '0',   #  v100:1,  0
@@ -87,126 +87,126 @@ if True:  # Ob - Obo (standard)
     })
 
 
-if True:  # OboMetaZero - Obo (standard)
-    HYPER_SWEEPS.append({
-        "env_name":             environments,
-        "policy_optimizer":     ['OboMetaZero'],
-        "policy_lamda":         [0.8],
-        "policy_kappa":         [20],
-        "policy_meta_stepsize": [1e-3],
-        "policy_epsilon_meta":  [1e-3],
-        "policy_beta2_meta":    [0.999],
-        "policy_meta_shadow_dist_reg": [0.1, 1e-2, 1e-3],
-        "policy_stepsize_parameterization": ['exp'],
-        #
-        "critic_optimizer":     ['OboBase'],
-        "critic_lamda":         [0.8],
-        "critic_kappa":         [2.0],
-        "seed":                 seeds,
-        ##"run_name":             [""],
-    })
+# if True:  # OboMetaZero - Obo (standard)
+#     HYPER_SWEEPS.append({
+#         "env_name":             environments,
+#         "policy_optimizer":     ['OboMetaZero'],
+#         "policy_lamda":         [0.8],
+#         "policy_kappa":         [20],
+#         "policy_meta_stepsize": [1e-3],
+#         "policy_epsilon_meta":  [1e-3],
+#         "policy_beta2_meta":    [0.999],
+#         "policy_meta_shadow_dist_reg": [0.1, 1e-2, 1e-3],
+#         "policy_stepsize_parameterization": ['exp'],
+#         #
+#         "critic_optimizer":     ['OboBase'],
+#         "critic_lamda":         [0.8],
+#         "critic_kappa":         [2.0],
+#         "seed":                 seeds,
+#         ##"run_name":             [""],
+#     })
 
-if True:  # OboMetaZero - Obo (standard)
-    HYPER_SWEEPS.append({
-        "env_name":             environments,
-        "policy_optimizer":     ['OboMetaZero'],
-        "policy_lamda":         [0.8],
-        "policy_kappa":         [20],
-        "policy_meta_stepsize": [1e-4],
-        "policy_epsilon_meta":  [1e-4],
-        "policy_beta2_meta":    [0.999],
-        "policy_meta_shadow_dist_reg": [0.1, 1e-2, 1e-3],
-        "policy_stepsize_parameterization": ['exp'],
-        #
-        "critic_optimizer":     ['OboBase'],
-        "critic_lamda":         [0.8],
-        "critic_kappa":         [2.0],
-        "seed":                 seeds,
-        ##"run_name":             [""],
-    })
+# if True:  # OboMetaZero - Obo (standard)
+#     HYPER_SWEEPS.append({
+#         "env_name":             environments,
+#         "policy_optimizer":     ['OboMetaZero'],
+#         "policy_lamda":         [0.8],
+#         "policy_kappa":         [20],
+#         "policy_meta_stepsize": [1e-4],
+#         "policy_epsilon_meta":  [1e-4],
+#         "policy_beta2_meta":    [0.999],
+#         "policy_meta_shadow_dist_reg": [0.1, 1e-2, 1e-3],
+#         "policy_stepsize_parameterization": ['exp'],
+#         #
+#         "critic_optimizer":     ['OboBase'],
+#         "critic_lamda":         [0.8],
+#         "critic_kappa":         [2.0],
+#         "seed":                 seeds,
+#         ##"run_name":             [""],
+#     })
     
 
-if True:  # Obo - OboMetaZero (standard)
-    HYPER_SWEEPS.append({
-        "env_name":             environments,
-        "policy_optimizer":     ['OboBase'],
-        "policy_lamda":         [0.8],
-        "policy_kappa":         [20],
-        #
-        "critic_optimizer":     ['OboMetaZero'],
-        "critic_lamda":         [0.8],
-        "critic_kappa":         [2.0],
-        "critic_meta_stepsize": [1e-3],
-        "critic_epsilon_meta":  [1e-3],
-        "critic_beta2_meta":    [0.999],
-        "critic_stepsize_parameterization": ['exp'],
-        "critic_meta_loss_type":            ['RG'],
-        "critic_meta_shadow_dist_reg":      [0.1, 1e-2, 1e-3],
-        "seed":                 seeds,
-        ##"run_name":             [""],
-    })
+# if True:  # Obo - OboMetaZero (standard)
+#     HYPER_SWEEPS.append({
+#         "env_name":             environments,
+#         "policy_optimizer":     ['OboBase'],
+#         "policy_lamda":         [0.8],
+#         "policy_kappa":         [20],
+#         #
+#         "critic_optimizer":     ['OboMetaZero'],
+#         "critic_lamda":         [0.8],
+#         "critic_kappa":         [2.0],
+#         "critic_meta_stepsize": [1e-3],
+#         "critic_epsilon_meta":  [1e-3],
+#         "critic_beta2_meta":    [0.999],
+#         "critic_stepsize_parameterization": ['exp'],
+#         "critic_meta_loss_type":            ['RG'],
+#         "critic_meta_shadow_dist_reg":      [0.1, 1e-2, 1e-3],
+#         "seed":                 seeds,
+#         ##"run_name":             [""],
+#     })
 
-if True:  # Obo - OboMetaZero (standard)
-    HYPER_SWEEPS.append({
-        "env_name":             environments,
-        "policy_optimizer":     ['OboBase'],
-        "policy_lamda":         [0.8],
-        "policy_kappa":         [20],
-        #
-        "critic_optimizer":     ['OboMetaZero'],
-        "critic_lamda":         [0.8],
-        "critic_kappa":         [2.0],
-        "critic_meta_stepsize": [1e-4],
-        "critic_epsilon_meta":  [1e-4],
-        "critic_beta2_meta":    [0.999],
-        "critic_stepsize_parameterization": ['exp'],
-        "critic_meta_loss_type":            ['RG'],
-        "critic_meta_shadow_dist_reg":      [0.1, 1e-2, 1e-3],
-        "seed":                 seeds,
-        ##"run_name":             [""],
-    })
-
-
-if True:  # Obo - OboMetaZero (standard)
-    HYPER_SWEEPS.append({
-        "env_name":             environments,
-        "policy_optimizer":     ['OboBase'],
-        "policy_lamda":         [0.8],
-        "policy_kappa":         [20],
-        #
-        "critic_optimizer":     ['OboMetaZero'],
-        "critic_lamda":         [0.8],
-        "critic_kappa":         [2.0],
-        "critic_meta_stepsize": [0.1],
-        "critic_epsilon_meta":  [0.1],
-        "critic_beta2_meta":    [0.99],
-        "critic_stepsize_parameterization": ['exp'],
-        "critic_meta_loss_type":            ['MC__mu_0.9999__epEndOnly_True__epContagious_False'],
-        "critic_meta_shadow_dist_reg":      [1e-2, 1e-3, 1e-4],
-        "seed":                 seeds,
-        ##"run_name":             [""],
-    })
+# if True:  # Obo - OboMetaZero (standard)
+#     HYPER_SWEEPS.append({
+#         "env_name":             environments,
+#         "policy_optimizer":     ['OboBase'],
+#         "policy_lamda":         [0.8],
+#         "policy_kappa":         [20],
+#         #
+#         "critic_optimizer":     ['OboMetaZero'],
+#         "critic_lamda":         [0.8],
+#         "critic_kappa":         [2.0],
+#         "critic_meta_stepsize": [1e-4],
+#         "critic_epsilon_meta":  [1e-4],
+#         "critic_beta2_meta":    [0.999],
+#         "critic_stepsize_parameterization": ['exp'],
+#         "critic_meta_loss_type":            ['RG'],
+#         "critic_meta_shadow_dist_reg":      [0.1, 1e-2, 1e-3],
+#         "seed":                 seeds,
+#         ##"run_name":             [""],
+#     })
 
 
-if True:  # Obo - OboMetaZero (standard)
-    HYPER_SWEEPS.append({
-        "env_name":             environments,
-        "policy_optimizer":     ['OboBase'],
-        "policy_lamda":         [0.8],
-        "policy_kappa":         [20],
-        #
-        "critic_optimizer":     ['OboMetaZero'],
-        "critic_lamda":         [0.8],
-        "critic_kappa":         [2.0],
-        "critic_meta_stepsize": [0.02],
-        "critic_epsilon_meta":  [0.02],
-        "critic_beta2_meta":    [0.99],
-        "critic_stepsize_parameterization": ['exp'],
-        "critic_meta_loss_type":            ['MC__mu_0.9999__epEndOnly_True__epContagious_False'],
-        "critic_meta_shadow_dist_reg":      [1e-2, 1e-3, 1e-4],
-        "seed":                 seeds,
-        ##"run_name":             [""],
-    })
+# if True:  # Obo - OboMetaZero (standard)
+#     HYPER_SWEEPS.append({
+#         "env_name":             environments,
+#         "policy_optimizer":     ['OboBase'],
+#         "policy_lamda":         [0.8],
+#         "policy_kappa":         [20],
+#         #
+#         "critic_optimizer":     ['OboMetaZero'],
+#         "critic_lamda":         [0.8],
+#         "critic_kappa":         [2.0],
+#         "critic_meta_stepsize": [0.1],
+#         "critic_epsilon_meta":  [0.1],
+#         "critic_beta2_meta":    [0.99],
+#         "critic_stepsize_parameterization": ['exp'],
+#         "critic_meta_loss_type":            ['MC__mu_0.9999__epEndOnly_True__epContagious_False'],
+#         "critic_meta_shadow_dist_reg":      [1e-2, 1e-3, 1e-4],
+#         "seed":                 seeds,
+#         ##"run_name":             [""],
+#     })
+
+
+# if True:  # Obo - OboMetaZero (standard)
+#     HYPER_SWEEPS.append({
+#         "env_name":             environments,
+#         "policy_optimizer":     ['OboBase'],
+#         "policy_lamda":         [0.8],
+#         "policy_kappa":         [20],
+#         #
+#         "critic_optimizer":     ['OboMetaZero'],
+#         "critic_lamda":         [0.8],
+#         "critic_kappa":         [2.0],
+#         "critic_meta_stepsize": [0.02],
+#         "critic_epsilon_meta":  [0.02],
+#         "critic_beta2_meta":    [0.99],
+#         "critic_stepsize_parameterization": ['exp'],
+#         "critic_meta_loss_type":            ['MC__mu_0.9999__epEndOnly_True__epContagious_False'],
+#         "critic_meta_shadow_dist_reg":      [1e-2, 1e-3, 1e-4],
+#         "seed":                 seeds,
+#         ##"run_name":             [""],
+#     })
 
 
 
