@@ -480,7 +480,7 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
         run_name=run_name+f'__seed{seed}',
         config=config,
     )
-    logger.log({'time/time': np.round((time.time() - start_time)/3600,2)}, step=0)
+    logger.log({'time/time': 0}, step=0)
     logging_level = logging_spec.get('level')
     if logging_level in ['heavy']:
         logger.watch([agent.policy_net, agent.critic_net], log="all")  # no-op for TB
