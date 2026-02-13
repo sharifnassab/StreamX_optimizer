@@ -1,121 +1,124 @@
 import torch
 import math
+from copy import deepcopy
+from torch.distributions import Normal
 from delta_clipper import delta_clipper
 from meta_opt_helper import activation_function, activation_function_inverse, clip_zeta_meta_function
+from MetaZero_loss_calculation import error_critic
 
-class OboMetaZero(torch.optim.Optimizer): 
-    def __init__(self, params, lr=1.0, gamma=0.99, lamda=0.0, kappa=2.0, delta_clip='none', delta_norm='none', beta2=0.999, entrywise_normalization='none', 
-                 weight_decay=0.0, momentum=0.0, meta_stepsize=1e-3, beta2_meta=0.999, stepsize_parameterization='exp', epsilon_meta=1e-3):
-        defaults = dict(lr=lr, gamma=gamma, lamda=lamda, beta2=beta2, beta_momentum=momentum)
+class OboMetaZero(): 
+    def __init__(self, network, role, gamma=0.99, lamda=0.0, kappa=2.0, entropy_coeff=0.01, delta_clip='none', delta_norm='none', beta2=0.999, entrywise_normalization='none', 
+                 weight_decay=0.0, momentum=0.0, meta_stepsize=1e-3, beta2_meta=0.999, stepsize_parameterization='exp', epsilon_meta=1e-3, meta_loss_type='none', meta_shadow_dist_reg=0.0):
+        self.opt_type = 'OboMetaZero'
+        self.role = role
+
+        self.net = network
+        self.net_shadow = deepcopy(network)
+
+        self.optimizer =        OboBase(self.net.parameters(),        gamma=gamma, lamda=lamda, kappa=kappa, delta_clip=delta_clip, delta_norm=delta_norm, beta2=beta2, entrywise_normalization=entrywise_normalization, weight_decay=weight_decay, momentum=momentum)
+        self.optimizer_shadow = OboBase(self.net_shadow.parameters(), gamma=gamma, lamda=lamda, kappa=kappa, delta_clip=delta_clip, delta_norm=delta_norm, beta2=beta2, entrywise_normalization=entrywise_normalization, weight_decay=weight_decay, momentum=momentum)  
+
         self.gamma = gamma
-        self.lamda = lamda
-        self.weight_decay = weight_decay
-        self.u_bar = 0.0
-        self.sigma = 0.0
-        self.t_val = 0
-        self.delta_norm=delta_norm
-        self.entrywise_normalization = entrywise_normalization # 'none' or 'RMSprop' or 'RMSPropInTrace' (meaning z accumulates entrywised scaled grads)  (default: RMSProp)
-        self.delta_clipper = delta_clipper(clip_type=delta_clip, normalization_type=delta_norm)
-        # Meta parameters:
+        self.entropy_coeff = entropy_coeff if role=='policy' else None
         self.meta_stepsize = meta_stepsize
         self.beta2_meta = beta2_meta
         self.epsilon_meta = epsilon_meta
         self.stepsize_parameterization = activation_function(stepsize_parameterization)
+        self.shadow_distance_regulizer_coeff = meta_shadow_dist_reg
+
+        self.update_meta_only_at_the_end_of_episodes = False
+        if role=='critic':
+            self.error_critic_main = error_critic(meta_loss_type=meta_loss_type, gamma=gamma)
+            self.error_critic_shadow = error_critic(meta_loss_type=meta_loss_type, gamma=gamma)
+            if meta_loss_type.split('__epEndOnly_')[-1].split('__')[0] in ['True', 'true', '1']:
+                self.update_meta_only_at_the_end_of_episodes = True
+
+        self.eta = torch.tensor(1.0/kappa)
         self.zeta = activation_function_inverse(stepsize_parameterization, 1/kappa)
         self.v_meta = 1.0
-        super(OboMetaOpt, self).__init__(params, defaults)
+        self.t_meta = 1
 
-    def step(self, delta, reset=False):
-        safe_delta = self.delta_clipper.clip_and_norm(delta)
+    def policy_calculations(self, local_net, s, a, delta, importance_sampling=False, target_policy_prob=None):
+        mu, std = local_net(s)
+        dist = Normal(mu, std)
+
+        log_prob_pi = (dist.log_prob(a)).sum()
+        prob_pi = torch.exp(log_prob_pi)
+        if importance_sampling and target_policy_prob is not None:
+            IS_ = prob_pi.item()/target_policy_prob
+        else:            
+            IS_ = 1.0
+        pure_entropy = dist.entropy().sum()
+        entropy_pi = self.entropy_coeff * dist.entropy().sum() * torch.sign(torch.tensor(delta)).item()
+        local_net.zero_grad()
+        (IS_*log_prob_pi + entropy_pi).backward()
+
+        return prob_pi.item(), pure_entropy.item()
+
+    def step(self, s, a, r, s_prime, terminated_mask_t, v_s, v_prime, delta, reset):
+        if self.role == 'critic':
+            self.net.zero_grad()
+            v_s.backward()
+
+            with torch.no_grad():
+                v_prime_shadow = self.net_shadow(s_prime)
+            v_s_shadow = self.net_shadow(s)
+            td_target_critic_shadow = r + self.gamma * v_prime_shadow * terminated_mask_t
+            delta_shadow = td_target_critic_shadow - v_s_shadow
+            self.net_shadow.zero_grad()
+            v_s_shadow.backward()
+
+        elif self.role == 'policy':
+            delta_shadow = delta
+            prob_pi, entropy_pi = self.policy_calculations(self.net, s, a, delta, importance_sampling=False)
+            prob_pi_shadow, entropy_pi_shadow = self.policy_calculations(self.net_shadow, s, a, delta_shadow, importance_sampling=True, target_policy_prob=prob_pi)
+            
+            importance_sampling = prob_pi_shadow/prob_pi
+            
+        
+        info = self.optimizer.step(delta, reset=reset)
+        info_shadow = self.optimizer_shadow.step(delta_shadow, reset=reset)
 
         # meta update
-        self.t_val += 1
-        if self.t_val>=2:
-            meta_grad = 0.0
-            for group in self.param_groups:
-                for p in group["params"]:
-                    state = self.state[p]
-                    h = state["h_meta"]
-                    meta_grad += safe_delta * ((p.grad * h).sum()).abs().item()
-            self.v_meta =  self.v_meta + ((1-self.beta2_meta)/(1-self.beta2_meta**(self.t_val-1))) * (meta_grad**2 - self.v_meta) 
-            self.zeta = self.zeta + self.meta_stepsize * meta_grad / (math.sqrt(self.v_meta) + 1e-8)
+        if self.role == 'critic':
+            error_main = self.error_critic_main.step(v_s.item(), v_prime.item(), r, v_prime.item(), reset)
+            error_shadow = self.error_critic_shadow.step(v_s_shadow.item(), v_prime_shadow.item(), r, v_prime.item(), reset)
+        elif self.role == 'policy':
+            delta_normalized = self.optimizer.delta_normalized
+            error_main = -(delta_normalized + self.entropy_coeff*entropy_pi)
+            error_shadow = -(importance_sampling*delta_normalized +  self.entropy_coeff*entropy_pi_shadow)
+
+        if reset or not self.update_meta_only_at_the_end_of_episodes:
+            self.t_meta += 1
+            meta_grad = (error_shadow-error_main)/self.epsilon_meta
+            self.v_meta =  self.v_meta + ((1-self.beta2_meta)/(1-self.beta2_meta**(self.t_meta-1))) * (meta_grad**2 - self.v_meta) 
+            self.zeta = self.zeta - self.meta_stepsize * meta_grad / (math.sqrt(self.v_meta) + 1e-8)
+
+            # regularization to pull shadow netwrok toward main network
+            
+            #self.zeta -= 0.01*self.meta_stepsize   # regularization for when it is indecisive
+
+        self.eta = self.stepsize_parameterization(self.zeta)
+        self.optimizer.eta = self.eta
+        self.optimizer_shadow.eta = self.stepsize_parameterization(self.zeta + self.epsilon_meta)
         
-        eta = self.stepsize_parameterization(self.zeta)
-        self.eta = eta
-
-        # base update
-        norm_grad = 0
-        z_sum = 0.0
-        for group in self.param_groups:
-            for p in group["params"]:
-                state = self.state[p]
-                if len(state) == 0:
-                    state["entrywise_squared_grad"] = torch.ones_like(p.data)
-                v = state["entrywise_squared_grad"]
-                if "eligibility_trace" not in state:
-                    state["eligibility_trace"] = torch.zeros_like(p.data)
-                e = state["eligibility_trace"]
-                
-                if self.entrywise_normalization.lower() in ['rmsprop']:
-                    v.mul_(group["beta2"]).addcmul_(p.grad, p.grad, value=1.0 - group["beta2"])
-                    v_hat = (v / (1.0 - group["beta2"] ** self.t_val)).sqrt() + 1e-8
-                    state["rmsprop_v_hat"] = v_hat
-                elif self.entrywise_normalization.lower()=='none':
-                    v_hat = 1.0
-                e.mul_(group["gamma"] * group["lamda"]).add_(p.grad)
-                z_sum += ((e.square() / v_hat).sum()).abs().item()
-                norm_grad += ((p.grad.square() / v_hat).sum()).abs().item()
+        if self.shadow_distance_regulizer_coeff>0:
+            with torch.no_grad():
+                for param, param_shadow in zip(self.net.parameters(), self.net_shadow.parameters()):
+                    param_shadow.add_(param.data - param_shadow.data, alpha=self.shadow_distance_regulizer_coeff)
+            
         
-        self.sigma +=  (1-self.gamma*self.lamda) * (norm_grad-self.sigma)
-        norm_normalizer = math.sqrt((self.sigma/(1-(self.gamma*self.lamda)**self.t_val)) + 1e-12) 
-        z_normalizer = math.sqrt(z_sum/(1-(self.gamma*self.lamda)**self.t_val))
-        normalizer_ = norm_normalizer * z_normalizer
-        step_size = 1 / normalizer_
+        return {**info, **{f'{key}_shadow':info_shadow[key] for key in info_shadow}}
 
-        for group in self.param_groups:
-            for p in group["params"]:
-                state = self.state[p]
-                e = state["eligibility_trace"]
-                if group["beta_momentum"]>0:
-                    if "momentum" not in state:
-                        state["momentum"] = torch.zeros_like(p.data)
-                    m = state["momentum"]
-                    if self.entrywise_normalization.lower() == 'rmsprop':
-                        m.mul_(group["beta_momentum"]).addcdiv_(e, state["rmsprop_v_hat"], value= safe_delta * step_size * (1-group["beta_momentum"]))
-                    else:
-                        m.mul_(group["beta_momentum"]).add_(e, alpha= safe_delta * step_size * (1-group["beta_momentum"]))
-                    delta_w = m
-                else:
-                    if self.entrywise_normalization.lower() == 'rmsprop':
-                        delta_w = safe_delta * step_size * e / state["rmsprop_v_hat"]
-                    else:
-                        delta_w = safe_delta * step_size * e
 
-                if "h_meta" not in state:
-                    state["h_meta"] = torch.zeros_like(p.data)
-                h = state["h_meta"]
-                h.mul_(self.h_decay_meta)
-
-                if self.weight_decay > 0.0:
-                    p.data.mul_(1.0-eta*self.weight_decay)
-                    h.mul_(1.0-eta*self.weight_decay)
-
-                p.data.add_(delta_w, alpha=eta)
-                h.data.add_(delta_w)
-
-                if reset:
-                    e.zero_()
-
-        info = {'clipped_step_size':step_size, 'delta':delta, 'delta_used':safe_delta, 'abs_delta':abs(delta), 'norm2_eligibility_trace':z_sum}
-        return info
-
+    
 
 
 
 class OboMetaOpt(torch.optim.Optimizer): 
-    def __init__(self, params, lr=1.0, gamma=0.99, lamda=0.0, kappa=2.0, delta_clip='none', delta_norm='none', beta2=0.999, entrywise_normalization='none', 
+    def __init__(self, params, gamma=0.99, lamda=0.0, kappa=2.0, delta_clip='none', delta_norm='none', beta2=0.999, entrywise_normalization='none', 
                  weight_decay=0.0, momentum=0.0, meta_stepsize=1e-4, beta2_meta=0.999, stepsize_parameterization='exp', h_decay_meta=0.9999):
-        defaults = dict(lr=lr, gamma=gamma, lamda=lamda, beta2=beta2, beta_momentum=momentum)
+        defaults = dict(gamma=gamma, lamda=lamda, beta2=beta2, beta_momentum=momentum)
         self.gamma = gamma
         self.lamda = lamda
         self.weight_decay = weight_decay
@@ -220,9 +223,9 @@ class OboMetaOpt(torch.optim.Optimizer):
 
 
 class OboBase(torch.optim.Optimizer): 
-    def __init__(self, params, lr=1.0, gamma=0.99, lamda=0.0, kappa=2.0, delta_clip='none', delta_norm='none', beta2=0.999, entrywise_normalization='none', 
+    def __init__(self, params, gamma=0.99, lamda=0.0, kappa=2.0, delta_clip='none', delta_norm='none', beta2=0.999, entrywise_normalization='none', 
                  weight_decay=0.0, momentum=0.0):
-        defaults = dict(lr=lr, gamma=gamma, lamda=lamda, beta2=beta2, beta_momentum=momentum)
+        defaults = dict(gamma=gamma, lamda=lamda, beta2=beta2, beta_momentum=momentum)
         self.gamma = gamma
         self.lamda = lamda
         self.eta = torch.tensor(1.0/kappa)
@@ -239,6 +242,7 @@ class OboBase(torch.optim.Optimizer):
 
     def step(self, delta, reset=False):
         safe_delta = self.delta_clipper.clip_and_norm(delta)
+        self.delta_normalized = safe_delta
         self.t_val += 1
 
         # base update

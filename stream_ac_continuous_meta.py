@@ -9,6 +9,7 @@ import gymnasium as gym
 import torch.nn.functional as F
 from torch.distributions import Normal
 from functools import partial
+from copy import deepcopy
 
 from optim import ObGD_sq as ObGDsq_Optimizer
 from optim import ObGD_sq_plain as ObGDsqPlain_Optimizer
@@ -30,6 +31,7 @@ from optim import Obo as Obo_Optimizer
 from optim import OboC as OboC_Optimizer
 from optim import OboBase as OboBase_Optimizer
 from optim import OboMetaOpt as OboMetaOpt_Optimizer
+from optim import OboMetaZero as OboMetaZero_Optimizer
 from time_wrapper import AddTimeInfo
 from normalization_wrappers import NormalizeObservation, ScaleReward
 from sparse_init import sparse_init
@@ -117,6 +119,9 @@ def spec_to_name(spec: dict) -> str:
                         'stepsize_parameterization':'', 
                         'h_decay_meta': 'hd', 
                         'clip_zeta_meta': 'clipz',
+                        'epsilon_meta': 'eps',
+                        'meta_loss_type': 'Loss',
+                        'meta_shadow_dist_reg': 'ShadowDistReg',
                         }
     list_params = []
     for key in short_hand_mapping:
@@ -159,12 +164,13 @@ class StreamAC(nn.Module):
 
         
         # ---- Optimizers (per-spec) ----
-        self.optimizer_policy   = self._build_optimizer(self.policy_net.parameters(),   self.policy_spec,   role="policy")
-        self.optimizer_critic   = self._build_optimizer(self.critic_net.parameters(),   self.critic_spec,   role="critic")
-        self.optimizer_observer = (self._build_optimizer(self.observer_net.parameters(), self.observer_spec, role="observer") if self.observer_exists else None)
+        self.optimizer_policy   = self._build_optimizer(self.policy_net,   self.policy_spec,   role="policy")
+        self.optimizer_critic   = self._build_optimizer(self.critic_net,   self.critic_spec,   role="critic")
+        self.optimizer_observer = (self._build_optimizer(self.observer_net, self.observer_spec, role="observer") if self.observer_exists else None)
 
 
-    def _build_optimizer(self, params, spec: dict, role: str):
+    def _build_optimizer(self, network, spec: dict, role: str):
+        params = network.parameters()
         spec = spec or {}
         opt_name = spec.get('optimizer', 'none').strip().lower()
         if opt_name in ['none','monte_carlo']:
@@ -176,6 +182,7 @@ class StreamAC(nn.Module):
         kappa  = float(spec.get('kappa'))
         weight_decay = float(spec.get('weight_decay', 0.0))
         momentum = float(spec.get('momentum', 0.0))
+        entropy_coeff = float(spec.get('entropy_coeff', 0.01))
 
         # Only for Obn / Obt
         u_trace = float(spec.get('u_trace', 0.01))
@@ -188,12 +195,14 @@ class StreamAC(nn.Module):
         delta_norm = spec.get('delta_norm', 'none')
 
         # for meta-optimizers
-        meta_stepsize = float(spec.get('meta_stepsize', 1e-4))
+        meta_stepsize = float(spec.get('meta_stepsize', 1e-3))
         beta2_meta    = float(spec.get('beta2_meta', 0.999))
         stepsize_parameterization= spec.get('stepsize_parameterization', 'sigmoid')
         h_decay_meta  = float(spec.get('h_decay_meta', 0.9999))
         clip_zeta_meta= spec.get('clip_zeta_meta', 'none')
-
+        epsilon_meta = float(spec.get('epsilon_meta', 1e-3))
+        meta_loss_type = spec.get('meta_loss_type')
+        meta_shadow_dist_reg = float(spec.get('meta_shadow_dist_reg', 0.0))
 
         if opt_name == 'obgd':
             return ObGD_Optimizer(params, lr=lr, gamma=gamma, lamda=lamda, kappa=kappa)
@@ -290,14 +299,28 @@ class StreamAC(nn.Module):
                 entrywise_normalization=entrywise_normalization, beta2=beta2, meta_stepsize=meta_stepsize, beta2_meta=beta2_meta, stepsize_parameterization=stepsize_parameterization, h_decay_meta=h_decay_meta
             )
         
+        if opt_name == 'obometazero':
+            return OboMetaZero_Optimizer(
+                network, role, gamma=gamma, lamda=lamda, kappa=kappa, entropy_coeff=entropy_coeff, weight_decay=weight_decay, delta_clip=delta_clip,  delta_norm=delta_norm, momentum=momentum, entrywise_normalization=entrywise_normalization, beta2=beta2, 
+                meta_stepsize=meta_stepsize, beta2_meta=beta2_meta, stepsize_parameterization=stepsize_parameterization, epsilon_meta=epsilon_meta, meta_loss_type=meta_loss_type, meta_shadow_dist_reg=meta_shadow_dist_reg
+            )
+        
+
+        
         raise ValueError(f"Unknown optimizer '{spec.get('optimizer')}' for role '{role}'.")
 
 
     def pi(self, x):
         return self.policy_net(x)
-
+    
+    def pi_shadow(self, x):
+        return self.policy_net_shadow(x)
+    
     def v(self, x):
         return self.critic_net(x)
+    
+    def v_shadow(self, x):
+        return self.critic_net_shadow(x)
     
     def v_observer(self, x):
         return self.observer_net(x)
@@ -324,31 +347,45 @@ class StreamAC(nn.Module):
         s_prime = torch.tensor(np.array(s_prime), dtype=torch.float)
         terminated_mask_t = torch.tensor(np.array(terminated_mask), dtype=torch.float)
 
-        v_s, v_prime = self.v(s), self.v(s_prime)
-
+        critic_has_shadow = (hasattr(self.optimizer_critic, 'opt_type') and self.optimizer_critic.opt_type in ['OboMetaZero'])
+        policy_has_shadow = (hasattr(self.optimizer_policy, 'opt_type') and self.optimizer_policy.opt_type in ['OboMetaZero'])
+        
+        
+        with torch.no_grad():
+            v_prime = self.v(s_prime)
+        v_s = self.v(s)
         td_target_critic = r + self.gamma_critic * v_prime * terminated_mask_t
         td_target_policy = r + self.gamma_policy * v_prime * terminated_mask_t
         delta_critic = td_target_critic - v_s
         delta_policy = td_target_policy - v_s
 
-        mu, std = self.pi(s)
-        dist = Normal(mu, std)
-
-        log_prob_pi = (dist.log_prob(a)).sum()
-        entropy_pi = self.entropy_coeff * dist.entropy().sum() * torch.sign(delta_policy).item()
-        self.optimizer_policy.zero_grad()
-        self.optimizer_critic.zero_grad()
-        if self.observer_exists: 
-            self.optimizer_observer.zero_grad()
+        if critic_has_shadow:
+            info_critic = self.optimizer_critic.step(s, a, r, s_prime, terminated_mask_t, v_s, v_prime, delta_critic.item(), reset=done)
+        else:
+            self.critic_net.zero_grad()
+            v_s.backward()
+            info_critic = self.optimizer_critic.step(delta_critic.item(), reset=done)
         
 
-        v_s.backward()
-        (log_prob_pi + entropy_pi).backward()
-        info_policy = self.optimizer_policy.step(delta_policy.item(), reset=done)
-        info_critic = self.optimizer_critic.step(delta_critic.item(), reset=done)
+        if policy_has_shadow:
+            info_policy = self.optimizer_policy.step(s, a, r, s_prime, terminated_mask_t, None, None, delta_policy.item(), reset=done)
+        else:
+            mu, std = self.pi(s)
+            dist = Normal(mu, std)
 
+            log_prob_pi = (dist.log_prob(a)).sum()
+            entropy_pi = self.entropy_coeff * dist.entropy().sum() * torch.sign(delta_policy).item()
+            self.policy_net.zero_grad()
+            (log_prob_pi + entropy_pi).backward()
+            info_policy = self.optimizer_policy.step(delta_policy.item(), reset=done)
+
+
+
+        
 
         # observer update:
+        if self.observer_exists: 
+            self.optimizer_observer.zero_grad()
         info_observer = {}
         if self.observer_exists:
             v_s_obs, v_prime_obs = self.v_observer(s), self.v_observer(s_prime)
@@ -362,17 +399,17 @@ class StreamAC(nn.Module):
             }
 
 
-        # Logging:
-        info_policy = {**(info_policy or {}),
-            "policy_log_prob": float((-log_prob_pi).item()),  # log π(a|s)
-            "std_mean": float(std.mean().item()),
-            "mu_norm": float(mu.norm().item()),
-            "reward": float(r.item()),
-        }
-        info_critic = {**(info_critic or {}),
-            "td_error": float(delta_critic.item()),
-            "v(s)": float(v_s.item()),
-        }
+        # # Logging:
+        # info_policy = {**(info_policy or {}),
+        #     "policy_log_prob": float((-log_prob_pi).item()),  # log π(a|s)
+        #     "std_mean": float(std.mean().item()),
+        #     "mu_norm": float(mu.norm().item()),
+        #     "reward": float(r.item()),
+        # }
+        # info_critic = {**(info_critic or {}),
+        #     "td_error": float(delta_critic.item()),
+        #     "v(s)": float(v_s.item()),
+        # }
 
         return  {'policy':info_policy, 'critic':info_critic, 'observer':info_observer}
 
@@ -591,6 +628,8 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
 
     print(f"total time = {time.gmtime(int(time.time() - start_time))}")
 
+    logger.log({'time/time': np.round((time.time() - start_time)/3600,2)}, step=t)
+
     env.close()
     logger.finish()
 
@@ -608,7 +647,7 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
 
 
 if __name__ == '__main__':
-    optimizer_choices = ['ObGD', 'Obo', 'OboBase', 'OboMetaOpt', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD', 'ObtC', 'ObtN', 'Obt', 'Obtnnz', 'Obonz', 'ObGDN', 'ObGDm', 'ObtCm', 'Obtm', 'OboC']
+    optimizer_choices = ['ObGD', 'Obo', 'OboBase', 'OboMetaOpt', 'OboMetaZero', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD', 'ObtC', 'ObtN', 'Obt', 'Obtnnz', 'Obonz', 'ObGDN', 'ObGDm', 'ObtCm', 'Obtm', 'OboC']
     parser = argparse.ArgumentParser(description='Stream AC(λ)')
     parser.add_argument('--env_name', type=str, default='Ant-v5')  # HalfCheetah-v4
     parser.add_argument('--seed', type=int, default=0)
@@ -634,10 +673,13 @@ if __name__ == '__main__':
     parser.add_argument('--policy_sig_power', type=float, default=2) # for Obt
     parser.add_argument('--policy_delta_clip', type=str, default='none') # for Obt    # 'none', '1', '10_avg_sq__dec_0.99', '10_avg_abs__dec_0.95', '10_avg_abs_max_1__dec_0.9', '10_avg_sq_max_20avg__dec_0.99'
     parser.add_argument('--policy_delta_norm', type=str, default='none') # for Obt    # 'none', '99sq', '99abs', '995clipSq', '995clipAbs'
-    parser.add_argument('--policy_meta_stepsize', type=float, default=1e-4)
+    parser.add_argument('--policy_meta_stepsize', type=float, default=1e-3)
     parser.add_argument('--policy_beta2_meta', type=float, default=0.999)
     parser.add_argument('--policy_stepsize_parameterization', type=str, default='sigmoid') # 'sigmoid', 'identity', 'exp'
     parser.add_argument('--policy_h_decay_meta', type=float, default=0.9999)
+    parser.add_argument('--policy_epsilon_meta', type=float, default=1e-3)
+    parser.add_argument('--policy_meta_loss_type', type=str, default='IS')
+    parser.add_argument('--policy_meta_shadow_dist_reg', type=float, default=0.0)
     parser.add_argument('--policy_clip_zeta_meta', type=str, default='none')  # 'none', 'minmax_10'
 
     parser.add_argument('--critic_hidden_depth', type=int, default=2)
@@ -658,10 +700,13 @@ if __name__ == '__main__':
     parser.add_argument('--critic_sig_power', type=float, default=2) # for Obt
     parser.add_argument('--critic_delta_clip', type=str, default='none') # for Obt    # 'none', '1', '10_avg_sq__dec_0.99', '10_avg_abs__dec_0.95', '10_avg_abs_max_1__dec_0.9', '10_avg_sq_max_20avg__dec_0.99'
     parser.add_argument('--critic_delta_norm', type=str, default='none') # for Obt    # 'none', '99sq', '99abs', '995clipSq', '995clipAbs'
-    parser.add_argument('--critic_meta_stepsize', type=float, default=1e-4)
+    parser.add_argument('--critic_meta_stepsize', type=float, default=1e-3)
     parser.add_argument('--critic_beta2_meta', type=float, default=0.999)
     parser.add_argument('--critic_stepsize_parameterization', type=str, default='sigmoid') # 'sigmoid', 'identity', 'exp'
     parser.add_argument('--critic_h_decay_meta', type=float, default=0.9999)
+    parser.add_argument('--critic_epsilon_meta', type=float, default=1e-3)
+    parser.add_argument('--critic_meta_loss_type', type=str, default='TD') # TD, RG, MC__mu_0.999__epEndOnly_False__epContagious_Flase
+    parser.add_argument('--critic_meta_shadow_dist_reg', type=float, default=0.0)
     parser.add_argument('--critic_clip_zeta_meta', type=str, default='none')  # 'none', 'minmax_10'
 
     parser.add_argument('--observer_hidden_depth', type=int, default=2)
@@ -686,6 +731,9 @@ if __name__ == '__main__':
     parser.add_argument('--observer_beta2_meta', type=float, default=0.999)
     parser.add_argument('--observer_stepsize_parameterization', type=str, default='sigmoid') # 'sigmoid', 'identity', 'exp'
     parser.add_argument('--observer_h_decay_meta', type=float, default=0.9999)
+    parser.add_argument('--observer_epsilon_meta', type=float, default=1e-3)
+    parser.add_argument('--observer_meta_loss_type', type=str, default='TD') # TD, RG, MC__mu_0.999__epEndOnly_False__epContagious_Flase
+    parser.add_argument('--observer_meta_shadow_dist_reg', type=float, default=0.0)
     parser.add_argument('--observer_clip_zeta_meta', type=str, default='none')  # 'none', 'minmax_10'
 
     parser.add_argument('--log_backend', type=str, default='none', choices=['none', 'tensorboard', 'wandb', 'wandb_offline'])
@@ -725,6 +773,7 @@ if __name__ == '__main__':
         'OboC':         shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'momentum', 'u_trace'],
         'OboBase':      shared_params + ['entrywise_normalization', 'beta2', 'delta_clip', 'delta_norm', 'momentum'],
         'OboMetaOpt':   shared_params + ['entrywise_normalization', 'beta2', 'delta_clip', 'delta_norm', 'momentum'] + ['meta_stepsize', 'beta2_meta', 'stepsize_parameterization', 'h_decay_meta'],
+        'OboMetaZero':   shared_params + ['entrywise_normalization', 'beta2', 'delta_clip', 'delta_norm', 'momentum'] + ['meta_stepsize', 'beta2_meta', 'stepsize_parameterization', 'epsilon_meta', 'meta_loss_type', 'meta_shadow_dist_reg'],
         }
     
     def build_spec(kind, args, required_optimizer_params) -> dict:
