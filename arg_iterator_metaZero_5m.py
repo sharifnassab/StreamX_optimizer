@@ -3,7 +3,7 @@ from _slurm_generator import generate_slurm
 
 RESOURCE_DEFAULTS = {
     "account":  "def-sutton",
-    "max_time": "1:00:00",
+    "max_time": "10:00:00",
     "cpus":     1,
     "mem":     '2G',
     "gpus":    '0',   #  v100:1,  0
@@ -19,7 +19,7 @@ PYTHON_ENTRYPOINT = "stream_ac_continuous_meta.py"
 
 COMMON_ENV = {
     #"env_name":            "Ant-v5",
-    "total_steps":          1_000_000,
+    "total_steps":          5_000_000,
     #
     "policy_gamma":         0.99,
     "policy_entropy_coeff": 0.01,
@@ -42,7 +42,7 @@ COMMON_ENV = {
     "log_dir":              "/home/asharif/scratch/StreamX_optimizer/WandB_offline", #"/home/asharif/StreamX_optimizer/WandB_offline",
     "log_dir_for_pickle":   "/home/asharif/scratch/StreamX_optimizer/Pickles",
     "logging_level":        "light",      # "light" , "heavy"
-    "project":              "StreamX_OptDesign_metaZero_5m_temp",
+    "project":              "StreamX_OptDesign_metaZero_5m_v2",
 }
 
 
@@ -55,8 +55,8 @@ run_description = '_'
 
 HYPER_SWEEPS = []
 
-environments = ['Ant-v5']#, 'HalfCheetah-v5', 'Hopper-v5', 'Walker2d-v5', 'Humanoid-v5', 'HumanoidStandup-v5']
-seeds = [i for i in range(2)] 
+environments = ['Ant-v5', 'HalfCheetah-v5', 'Hopper-v5', 'Walker2d-v5', 'Humanoid-v5', 'HumanoidStandup-v5']
+seeds = [i for i in range(10)] 
 
 
 if False:  # ObGD - ObGD (standard)
@@ -66,25 +66,25 @@ if False:  # ObGD - ObGD (standard)
         "policy_kappa":         [3], # 3 is optimum consistently
         "policy_entropy_coeff": [0.01],
         "policy_lamda":         [0.0],
-        "critic_kappa":     2.0,
+        "critic_kappa":         [2.0],
         "critic_lamda":         [0.0],
         "critic_optimizer":     ['ObGD'],   # ['ObGD', 'AdaptiveObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC'],
         "seed":                 seeds,
     })
 
-# if True:  # Ob - Obo (standard)
-#     HYPER_SWEEPS.append({
-#         "env_name":             environments,
-#         "policy_optimizer":     ['OboBase'],
-#         "policy_lamda":         [0.8],
-#         "policy_kappa":         [20],
-#         #
-#         "critic_optimizer":     ['OboBase'],
-#         "critic_lamda":         [0.8],
-#         "critic_kappa":         [2.0],
-#         "seed":                 seeds,
-#         ##"run_name":             [""],
-#     })
+if True:  # Ob - Obo (standard)
+    HYPER_SWEEPS.append({
+        "env_name":             environments,
+        "policy_optimizer":     ['OboBase'],
+        "policy_lamda":         [0.8],
+        "policy_kappa":         [20],
+        #
+        "critic_optimizer":     ['OboBase'],
+        "critic_lamda":         [0.8],
+        "critic_kappa":         [2.0],
+        "seed":                 seeds,
+        ##"run_name":             [""],
+    })
 
 
 # if True:  # OboMetaZero - Obo (standard)
@@ -117,77 +117,77 @@ if True:  # Obo - OboMetaZero (standard)
         "critic_optimizer":     ['OboMetaZero'],
         "critic_lamda":         [0.8],
         "critic_kappa":         [2.0],
-        "critic_meta_stepsize": [1e-3],
+        "critic_meta_stepsize": [1e-4],
         "critic_epsilon_meta":  [1e-3],
         "critic_beta2_meta":    [0.999],
         "critic_stepsize_parameterization": ['exp'],
         "critic_meta_loss_type":            ['RG'],
-        "critic_meta_shadow_dist_reg":      [1e-3],
+        "critic_meta_shadow_dist_reg":      [1e-2, 1e-3, 1e-4],
         "seed":                 seeds,
         ##"run_name":             [""],
     })
 
-# if True:  # Obo - OboMetaZero (standard)
-#     HYPER_SWEEPS.append({
-#         "env_name":             environments,
-#         "policy_optimizer":     ['OboBase'],
-#         "policy_lamda":         [0.8],
-#         "policy_kappa":         [20],
-#         #
-#         "critic_optimizer":     ['OboMetaZero'],
-#         "critic_lamda":         [0.8],
-#         "critic_kappa":         [2.0],
-#         "critic_meta_stepsize": [1e-4],
-#         "critic_epsilon_meta":  [1e-4],
-#         "critic_beta2_meta":    [0.999],
-#         "critic_stepsize_parameterization": ['exp'],
-#         "critic_meta_loss_type":            ['RG'],
-#         "critic_meta_shadow_dist_reg":      [0.1, 1e-2, 1e-3],
-#         "seed":                 seeds,
-#         ##"run_name":             [""],
-#     })
+if True:  # Obo - OboMetaZero (standard)
+    HYPER_SWEEPS.append({
+        "env_name":             environments,
+        "policy_optimizer":     ['OboBase'],
+        "policy_lamda":         [0.8],
+        "policy_kappa":         [20],
+        #
+        "critic_optimizer":     ['OboMetaZero'],
+        "critic_lamda":         [0.8],
+        "critic_kappa":         [2.0],
+        "critic_meta_stepsize": [1e-4],
+        "critic_epsilon_meta":  [1e-4],
+        "critic_beta2_meta":    [0.999],
+        "critic_stepsize_parameterization": ['exp'],
+        "critic_meta_loss_type":            ['RG'],
+        "critic_meta_shadow_dist_reg":      [1e-2, 1e-3, 1e-4],
+        "seed":                 seeds,
+        ##"run_name":             [""],
+    })
 
 
-# if True:  # Obo - OboMetaZero (standard)
-#     HYPER_SWEEPS.append({
-#         "env_name":             environments,
-#         "policy_optimizer":     ['OboBase'],
-#         "policy_lamda":         [0.8],
-#         "policy_kappa":         [20],
-#         #
-#         "critic_optimizer":     ['OboMetaZero'],
-#         "critic_lamda":         [0.8],
-#         "critic_kappa":         [2.0],
-#         "critic_meta_stepsize": [0.1],
-#         "critic_epsilon_meta":  [0.1],
-#         "critic_beta2_meta":    [0.99],
-#         "critic_stepsize_parameterization": ['exp'],
-#         "critic_meta_loss_type":            ['MC__mu_0.9999__epEndOnly_True__epContagious_False'],
-#         "critic_meta_shadow_dist_reg":      [1e-2, 1e-3, 1e-4],
-#         "seed":                 seeds,
-#         ##"run_name":             [""],
-#     })
+if True:  # Obo - OboMetaZero (standard)
+    HYPER_SWEEPS.append({
+        "env_name":             environments,
+        "policy_optimizer":     ['OboBase'],
+        "policy_lamda":         [0.8],
+        "policy_kappa":         [20],
+        #
+        "critic_optimizer":     ['OboMetaZero'],
+        "critic_lamda":         [0.8],
+        "critic_kappa":         [2.0],
+        "critic_meta_stepsize": [0.1],
+        "critic_epsilon_meta":  [0.1],
+        "critic_beta2_meta":    [0.99],
+        "critic_stepsize_parameterization": ['exp'],
+        "critic_meta_loss_type":            ['MC__mu_0.9999__epEndOnly_True__epContagious_False'],
+        "critic_meta_shadow_dist_reg":      [1e-2, 1e-3, 1e-4],
+        "seed":                 seeds,
+        ##"run_name":             [""],
+    })
 
 
-# if True:  # Obo - OboMetaZero (standard)
-#     HYPER_SWEEPS.append({
-#         "env_name":             environments,
-#         "policy_optimizer":     ['OboBase'],
-#         "policy_lamda":         [0.8],
-#         "policy_kappa":         [20],
-#         #
-#         "critic_optimizer":     ['OboMetaZero'],
-#         "critic_lamda":         [0.8],
-#         "critic_kappa":         [2.0],
-#         "critic_meta_stepsize": [0.02],
-#         "critic_epsilon_meta":  [0.02],
-#         "critic_beta2_meta":    [0.99],
-#         "critic_stepsize_parameterization": ['exp'],
-#         "critic_meta_loss_type":            ['MC__mu_0.9999__epEndOnly_True__epContagious_False'],
-#         "critic_meta_shadow_dist_reg":      [1e-2, 1e-3, 1e-4],
-#         "seed":                 seeds,
-#         ##"run_name":             [""],
-#     })
+if True:  # Obo - OboMetaZero (standard)
+    HYPER_SWEEPS.append({
+        "env_name":             environments,
+        "policy_optimizer":     ['OboBase'],
+        "policy_lamda":         [0.8],
+        "policy_kappa":         [20],
+        #
+        "critic_optimizer":     ['OboMetaZero'],
+        "critic_lamda":         [0.8],
+        "critic_kappa":         [2.0],
+        "critic_meta_stepsize": [0.02],
+        "critic_epsilon_meta":  [0.02],
+        "critic_beta2_meta":    [0.99],
+        "critic_stepsize_parameterization": ['exp'],
+        "critic_meta_loss_type":            ['MC__mu_0.9999__epEndOnly_True__epContagious_False'],
+        "critic_meta_shadow_dist_reg":      [1e-2, 1e-3, 1e-4],
+        "seed":                 seeds,
+        ##"run_name":             [""],
+    })
 
 
 
