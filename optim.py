@@ -63,8 +63,9 @@ class OboMetaZero():
             with torch.no_grad():
                 v_prime_shadow = self.net_shadow(s_prime)
             v_s_shadow = self.net_shadow(s)
-            td_target_critic_shadow = r + self.gamma * v_prime_shadow * terminated_mask_t
-            delta_shadow = td_target_critic_shadow - v_s_shadow
+            with torch.no_grad():
+                td_target_critic_shadow = r + self.gamma * v_prime_shadow * terminated_mask_t
+                delta_shadow = (td_target_critic_shadow - v_s_shadow).item()
             self.net_shadow.zero_grad()
             v_s_shadow.backward()
 
@@ -216,7 +217,7 @@ class OboMetaOpt(torch.optim.Optimizer):
                 if reset:
                     e.zero_()
 
-        info = {'clipped_step_size':step_size, 'delta':delta, 'delta_used':safe_delta, 'abs_delta':abs(delta), 'norm2_eligibility_trace':z_sum}
+        info = {'clipped_step_size':float(step_size), 'delta':float(delta), 'delta_used':float(safe_delta), 'abs_delta':float(abs(delta)), 'norm2_eligibility_trace':float(z_sum)}
         return info
 
 
@@ -299,7 +300,7 @@ class OboBase(torch.optim.Optimizer):
                 if reset:
                     e.zero_()
 
-        info = {'clipped_step_size':step_size, 'delta':delta, 'delta_used':safe_delta, 'abs_delta':abs(delta), 'norm2_eligibility_trace':z_sum}
+        info = {'clipped_step_size':float(step_size), 'delta':float(delta), 'delta_used':float(safe_delta), 'abs_delta':float(abs(delta)), 'norm2_eligibility_trace':float(z_sum)}
         return info
 
 
