@@ -23,15 +23,20 @@ def activation_function_inverse(name, y):
         raise(ValueError(f'     {name}     not supported'))
     
 def clip_zeta_meta_function(name='none'):  # 'minmax_10'
-    if name.lower() in ['none', 'no_clip']:
+    name_lower = name.lower()
+    if name_lower in ['none', 'no_clip']:
         return lambda x: x
-    elif name.lower().startswith('minmax_'):
+    elif ('etamin' in name_lower) or ('etamax' in name_lower):
+        th_min = math.log(float((name_lower+'_').split('etamin_')[-1].split('_')[0])) if 'etamin' in name_lower else None
+        th_max = math.log(float((name_lower+'_').split('etamax_')[-1].split('_')[0])) if 'etamax' in name_lower else None
+        return lambda x: torch.clamp(x, min=th_min, max=th_max)
+    elif name_lower.startswith('minmax_'):
         th = float(name.split('_')[1])
         return lambda x: torch.clamp(x, min=-th, max=th)
-    elif name.lower().startswith('min_'):
+    elif name_lower.startswith('min_'):
         th = float(name.split('_')[1])
         return lambda x: torch.clamp(x, min=th)
-    elif name.lower().startswith('max_'):
+    elif name_lower.startswith('max_'):
         th = float(name.split('_')[1])
         return lambda x: torch.clamp(x, max=th)
     else:

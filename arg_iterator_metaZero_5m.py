@@ -72,20 +72,38 @@ if False:  # ObGD - ObGD (standard)
         "seed":                 seeds,
     })
 
-# if True:  # Ob - Obo (standard)
-#     HYPER_SWEEPS.append({
-#         "env_name":             environments,
-#         "policy_optimizer":     ['OboBase'],
-#         "policy_lamda":         [0.8],
-#         "policy_kappa":         [20],
-#         #
-#         "critic_optimizer":     ['OboBase'],
-#         "critic_lamda":         [0.8],
-#         "critic_kappa":         [2.0],
-#         "seed":                 seeds,
-#         ##"run_name":             [""],
-#     })
+if False:  # Obo - Obo (standard)
+    HYPER_SWEEPS.append({
+        "env_name":             environments,
+        "policy_optimizer":     ['OboBase'],
+        "policy_lamda":         [0.8],
+        "policy_kappa":         [20],
+        #
+        "critic_optimizer":     ['OboBase'],
+        "critic_lamda":         [0.8],
+        "critic_kappa":         [2.0],
+        "seed":                 seeds,
+        ##"run_name":             [""],
+    })
 
+
+if True:  # Obo - Obo (standard)
+    HYPER_SWEEPS.append({
+        "env_name":             environments,
+        "policy_optimizer":     ['OboBase'],
+        "policy_lamda":         [0.8],
+        "policy_kappa":         [20],
+        "policy_beta2":         [0.9999],
+        "policy_rmspower":      [3.0],
+        #
+        "critic_optimizer":     ['OboBase'],
+        "critic_lamda":         [0.8],
+        "critic_kappa":         [2.0],
+        "critic_beta2":         [0.9999],
+        "critic_rmspower":      [3.0],
+        "seed":                 seeds,
+        ##"run_name":             [""],
+    })
 
 if True:  # OboMetaZero - Obo (standard)
     HYPER_SWEEPS.append({
@@ -94,10 +112,11 @@ if True:  # OboMetaZero - Obo (standard)
         "policy_lamda":         [0.8],
         "policy_kappa":         [20],
         "policy_meta_stepsize": [1e-4],
-        "policy_epsilon_meta":  [1e-4, 1e-3],
+        "policy_epsilon_meta":  [1e-2],
+        "policy_meta_shadow_dist_reg": [1e-3],
         "policy_beta2_meta":    [0.999],
-        "policy_meta_shadow_dist_reg": [1e-3, 1e-4],
         "policy_stepsize_parameterization": ['exp'],
+        "policy_clip_zeta_meta": ['none', 'etaMin_0.005_etaMax_0.5'],  # 'none', 'etaMin_0.005_etaMax_0.5'
         #
         "critic_optimizer":     ['OboBase'],
         "critic_lamda":         [0.8],
@@ -169,25 +188,26 @@ if True:  # OboMetaZero - Obo (standard)
 #     })
 
 
-# if True:  # Obo - OboMetaZero (standard)
-#     HYPER_SWEEPS.append({
-#         "env_name":             environments,
-#         "policy_optimizer":     ['OboBase'],
-#         "policy_lamda":         [0.8],
-#         "policy_kappa":         [20],
-#         #
-#         "critic_optimizer":     ['OboMetaZero'],
-#         "critic_lamda":         [0.8],
-#         "critic_kappa":         [2.0],
-#         "critic_meta_stepsize": [0.02],
-#         "critic_epsilon_meta":  [0.02],
-#         "critic_beta2_meta":    [0.99],
-#         "critic_stepsize_parameterization": ['exp'],
-#         "critic_meta_loss_type":            ['MC__mu_0.9999__epEndOnly_True__epContagious_False'],
-#         "critic_meta_shadow_dist_reg":      [1e-2, 1e-3, 1e-4],
-#         "seed":                 seeds,
-#         ##"run_name":             [""],
-#     })
+if True:  # Obo - OboMetaZero (standard)
+    HYPER_SWEEPS.append({
+        "env_name":             environments,
+        "policy_optimizer":     ['OboBase'],
+        "policy_lamda":         [0.8],
+        "policy_kappa":         [20],
+        #
+        "critic_optimizer":     ['OboMetaZero'],
+        "critic_lamda":         [0.8],
+        "critic_kappa":         [2.0],
+        "critic_meta_stepsize": [0.01, 0.005],
+        "critic_epsilon_meta":  [0.01, 0.05],
+        "critic_beta2_meta":    [0.99],
+        "critic_stepsize_parameterization": ['exp'],
+        "critic_meta_loss_type":            ['MC__mu_0.9999__epEndOnly_True__epContagious_False'],
+        "critic_meta_shadow_dist_reg":      [1e-3],
+        "critic_clip_zeta_meta":            ['etaMin_0.01_etaMax_1.0'],
+        "seed":                 seeds,
+        ##"run_name":             [""],
+    })
 
 
 

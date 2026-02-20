@@ -104,6 +104,7 @@ def spec_to_name(spec: dict) -> str:
                         'gamma':        'gam',
                         'entrywise_normalization': 'en',
                         'beta2':        'b2',
+                        'rmspower':      'pow',
                         'u_trace':      'u',
                         'entropy_coeff':'ent',
                         'momentum':     'm',
@@ -188,6 +189,7 @@ class StreamAC(nn.Module):
         u_trace = float(spec.get('u_trace', 0.01))
         entrywise_normalization = spec.get('entrywise_normalization', 'none')
         beta2  = float(spec.get('beta2', 0.999))
+        rmspower = float(spec.get('rmspower', 2.0))
         delta_trace = float(spec.get('delta_trace', 0.01))
         sig_power = float(spec.get('sig_power', 2))
         in_trace_sample_scaling = spec.get('delta_trace', False)
@@ -290,19 +292,19 @@ class StreamAC(nn.Module):
         if opt_name == 'obobase':
             return OboBase_Optimizer(
                 params, gamma=gamma, lamda=lamda, kappa=kappa,  weight_decay=weight_decay, delta_clip=delta_clip,  delta_norm=delta_norm, momentum=momentum,
-                entrywise_normalization=entrywise_normalization, beta2=beta2
+                entrywise_normalization=entrywise_normalization, beta2=beta2, rmspower=rmspower
             )
         
         if opt_name == 'obometaopt':
             return OboMetaOpt_Optimizer(
                 params, gamma=gamma, lamda=lamda, kappa=kappa,  weight_decay=weight_decay, delta_clip=delta_clip,  delta_norm=delta_norm, momentum=momentum,
-                entrywise_normalization=entrywise_normalization, beta2=beta2, meta_stepsize=meta_stepsize, beta2_meta=beta2_meta, stepsize_parameterization=stepsize_parameterization, h_decay_meta=h_decay_meta
+                entrywise_normalization=entrywise_normalization, beta2=beta2, rmspower=rmspower, meta_stepsize=meta_stepsize, beta2_meta=beta2_meta, stepsize_parameterization=stepsize_parameterization, h_decay_meta=h_decay_meta, clip_zeta_meta=clip_zeta_meta
             )
         
         if opt_name == 'obometazero':
             return OboMetaZero_Optimizer(
                 network, role, gamma=gamma, lamda=lamda, kappa=kappa, entropy_coeff=entropy_coeff, weight_decay=weight_decay, delta_clip=delta_clip,  delta_norm=delta_norm, momentum=momentum, entrywise_normalization=entrywise_normalization, beta2=beta2, 
-                meta_stepsize=meta_stepsize, beta2_meta=beta2_meta, stepsize_parameterization=stepsize_parameterization, epsilon_meta=epsilon_meta, meta_loss_type=meta_loss_type, meta_shadow_dist_reg=meta_shadow_dist_reg
+                meta_stepsize=meta_stepsize, beta2_meta=beta2_meta, rmspower=rmspower, stepsize_parameterization=stepsize_parameterization, epsilon_meta=epsilon_meta, meta_loss_type=meta_loss_type, meta_shadow_dist_reg=meta_shadow_dist_reg, clip_zeta_meta=clip_zeta_meta
             )
         
 
@@ -668,6 +670,7 @@ if __name__ == '__main__':
     parser.add_argument('--policy_u_trace', type=float, default=0.01)  # for Obn
     parser.add_argument('--policy_entrywise_normalization', type=str, default='RMSProp')  # 'none' or 'RMSProp'
     parser.add_argument('--policy_beta2', type=float, default=0.999)  # for Obn
+    parser.add_argument('--policy_rmspower', type=float, default=2.0)  # for Obn
     parser.add_argument('--policy_delta_trace', type=float, default=0.01)  # for ObnN
     parser.add_argument('--policy_weight_decay', type=float, default=0.0) 
     parser.add_argument('--policy_in_trace_sample_scaling', type=str, default='True', choices=['True', 'False'])  # for Obt
@@ -681,7 +684,7 @@ if __name__ == '__main__':
     parser.add_argument('--policy_epsilon_meta', type=float, default=1e-3)
     parser.add_argument('--policy_meta_loss_type', type=str, default='IS')
     parser.add_argument('--policy_meta_shadow_dist_reg', type=float, default=0.0)
-    parser.add_argument('--policy_clip_zeta_meta', type=str, default='none')  # 'none', 'minmax_10'
+    parser.add_argument('--policy_clip_zeta_meta', type=str, default='none')  # 'none', 'etaMin_0.01_etaMax_1.0'
 
     parser.add_argument('--critic_hidden_depth', type=int, default=2)
     parser.add_argument('--critic_hidden_width', type=int, default=128)
@@ -695,6 +698,7 @@ if __name__ == '__main__':
     parser.add_argument('--critic_u_trace', type=float, default=0.01)  # for Obn
     parser.add_argument('--critic_entrywise_normalization', type=str, default='RMSProp')  # 'none' or 'RMSProp'
     parser.add_argument('--critic_beta2', type=float, default=0.999)  # for Obn
+    parser.add_argument('--critic_rmspower', type=float, default=2)  # for Obn
     parser.add_argument('--critic_delta_trace', type=float, default=0.01)  # for ObnN
     parser.add_argument('--critic_weight_decay', type=float, default=0.0) 
     parser.add_argument('--critic_in_trace_sample_scaling', type=str, default='True', choices=['True', 'False']) # for Obt
@@ -708,7 +712,7 @@ if __name__ == '__main__':
     parser.add_argument('--critic_epsilon_meta', type=float, default=1e-3)
     parser.add_argument('--critic_meta_loss_type', type=str, default='TD') # TD, RG, MC__mu_0.999__epEndOnly_False__epContagious_Flase
     parser.add_argument('--critic_meta_shadow_dist_reg', type=float, default=0.0)
-    parser.add_argument('--critic_clip_zeta_meta', type=str, default='none')  # 'none', 'minmax_10'
+    parser.add_argument('--critic_clip_zeta_meta', type=str, default='none')  # 'none', 'etaMin_0.01_etaMax_1.0'
 
     parser.add_argument('--observer_hidden_depth', type=int, default=2)
     parser.add_argument('--observer_hidden_width', type=int, default=128)
@@ -722,6 +726,7 @@ if __name__ == '__main__':
     parser.add_argument('--observer_u_trace', type=float, default=0.01)  # for Obn
     parser.add_argument('--observer_entrywise_normalization', type=str, default='RMSProp')  # 'none' or 'RMSProp'
     parser.add_argument('--observer_beta2', type=float, default=0.999)  # for Obn
+    parser.add_argument('--observer_rmspower', type=float, default=2.0)  # for Obn
     parser.add_argument('--observer_delta_trace', type=float, default=0.01)  # for ObnN
     parser.add_argument('--observer_weight_decay', type=float, default=0.0) 
     parser.add_argument('--observer_in_trace_sample_scaling', type=str, default='True', choices=['True', 'False']) # for Obt
@@ -735,7 +740,7 @@ if __name__ == '__main__':
     parser.add_argument('--observer_epsilon_meta', type=float, default=1e-3)
     parser.add_argument('--observer_meta_loss_type', type=str, default='TD') # TD, RG, MC__mu_0.999__epEndOnly_False__epContagious_Flase
     parser.add_argument('--observer_meta_shadow_dist_reg', type=float, default=0.0)
-    parser.add_argument('--observer_clip_zeta_meta', type=str, default='none')  # 'none', 'minmax_10'
+    parser.add_argument('--observer_clip_zeta_meta', type=str, default='none')  # 'none', 'etaMin_0.01_etaMax_1.0'
 
     parser.add_argument('--log_backend', type=str, default='none', choices=['none', 'tensorboard', 'wandb', 'wandb_offline'])
     parser.add_argument('--log_dir', type=str, default='/home/asharif/StreamX_optimizer/WandB_offline', help='WandB offline log dir (if backend=wandb_offline)')
@@ -772,9 +777,10 @@ if __name__ == '__main__':
         'ObGDm':        shared_params + ['lr', 'momentum'],
         'Obo':          shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'delta_clip', 'delta_norm', 'momentum', 'u_trace'],
         'OboC':         shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'momentum', 'u_trace'],
-        'OboBase':      shared_params + ['entrywise_normalization', 'beta2', 'delta_clip', 'delta_norm', 'momentum'],
-        'OboMetaOpt':   shared_params + ['entrywise_normalization', 'beta2', 'delta_clip', 'delta_norm', 'momentum'] + ['meta_stepsize', 'beta2_meta', 'stepsize_parameterization', 'h_decay_meta'],
-        'OboMetaZero':   shared_params + ['entrywise_normalization', 'beta2', 'delta_clip', 'delta_norm', 'momentum'] + ['meta_stepsize', 'beta2_meta', 'stepsize_parameterization', 'epsilon_meta', 'meta_loss_type', 'meta_shadow_dist_reg'],
+        #
+        'OboBase':      shared_params + ['entrywise_normalization', 'beta2', 'delta_clip', 'delta_norm', 'momentum', 'rmspower'],
+        'OboMetaOpt':   shared_params + ['entrywise_normalization', 'beta2', 'delta_clip', 'delta_norm', 'momentum', 'rmspower'] + ['meta_stepsize', 'beta2_meta', 'stepsize_parameterization', 'h_decay_meta', 'clip_zeta_meta'],
+        'OboMetaZero':   shared_params + ['entrywise_normalization', 'beta2', 'delta_clip', 'delta_norm', 'momentum', 'rmspower'] + ['meta_stepsize', 'beta2_meta', 'stepsize_parameterization', 'epsilon_meta', 'meta_loss_type', 'meta_shadow_dist_reg', 'clip_zeta_meta'],
         }
     
     def build_spec(kind, args, required_optimizer_params) -> dict:

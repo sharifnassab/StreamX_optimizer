@@ -9,8 +9,8 @@ import gymnasium as gym
 import torch.nn.functional as F
 from torch.distributions import Normal
 from functools import partial
+import matplotlib.pyplot as plt
 from copy import deepcopy
-
 from optim import ObGD_sq as ObGDsq_Optimizer
 from optim import ObGD_sq_plain as ObGDsqPlain_Optimizer
 from optim import ObGD as ObGD_Optimizer
@@ -32,13 +32,95 @@ from optim import OboC as OboC_Optimizer
 from optim import OboBase as OboBase_Optimizer
 from optim import OboMetaOpt as OboMetaOpt_Optimizer
 from optim import OboMetaZero as OboMetaZero_Optimizer
+from optim import OboBaseStats as OboBaseStats_Optimizer
 from time_wrapper import AddTimeInfo
 from normalization_wrappers import NormalizeObservation, ScaleReward
 from sparse_init import sparse_init
-
-# NEW: our tiny logger (wandb or tensorboard)
 from logger import get_logger
 print('All imports done. 2')  
+
+
+def plot_lists(critic_list, policy_list, bins=30, suptitle=None):
+    critic = np.asarray(critic_list, dtype=float)
+    policy = np.asarray(policy_list, dtype=float)
+
+    if critic.ndim != 2 or critic.shape[1] != 4:
+        raise ValueError(f"critic_list must be shape (N, 4). Got {critic.shape}.")
+    if policy.ndim != 2 or policy.shape[1] != 4:
+        raise ValueError(f"policy_list must be shape (N, 4). Got {policy.shape}.")
+
+    fig, axes = plt.subplots(2, 4, figsize=(16, 7), constrained_layout=False)
+
+    def do_row(ax_row, data, row_name):
+        # Col 0: scatter (0 vs 1)
+        ax = ax_row[0]
+        ax.scatter(data[:, 0], data[:, 1], s=12, alpha=0.7)
+        #ax.set_xlim(-1, 1)
+        #ax.set_ylim(-1, 1)
+        ax.axis('equal')
+        ax.set_title(f"{row_name}: actual vs intended update")
+        ax.set_xlabel("intended update")
+        ax.set_ylabel("actual update")
+        ax.grid(True, alpha=0.25)
+
+        # # Col 1: scatter (2 vs 3)
+        # ax = ax_row[1]
+        # ax.scatter(data[:, 3], data[:, 2], s=12, alpha=0.7)
+        # #ax.set_xlim(-1, 1)
+        # #ax.set_ylim(-1, 1)
+        # ax.set_title(f"{row_name}: ratio (actual/intended) vs safe_delta")
+        # ax.set_xlabel("safe_delta")
+        # ax.set_ylabel("ratio (actual/intended)")
+        # ax.grid(True, alpha=0.25)
+
+        # Col 1: Hist of alpha
+        ax = ax_row[1]
+        x = data[:, 3]
+        ax.hist(x, bins=bins, edgecolor="black", alpha=0.8)
+        ax.set_title(f"{row_name}: hist of log10(stepsize)")
+        ax.set_xlabel("log10(stepsize)")
+        ax.set_ylabel("Histogram count")
+        ax.grid(True, alpha=0.25)
+
+        # Col 2: histogram of entry[2]
+        ax = ax_row[2]
+        x = data[:, 2]
+        ax.hist(x, bins=bins, edgecolor="black", alpha=0.8)
+        ax.set_title(f"{row_name}: hist of ratio (actual/intended)")
+        ax.set_xlabel("ratio (actual/intended)")
+        ax.set_ylabel("Histogram count")
+        ax.grid(True, alpha=0.25)
+
+        # Col 3: CDF of entry[2]
+        ax = ax_row[3]
+        x = data[:, 2]
+        xs = np.sort(x)
+        cdf = np.arange(1, len(xs) + 1) / len(xs)
+        ax.plot(xs, cdf)
+        ax.set_title(f"{row_name}: CDF of ratio (actual/intended)")
+        ax.set_xlabel("ratio (actual/intended)")
+        ax.set_ylabel("CDF")
+        ax.set_ylim(0, 1)
+        ax.grid(True, alpha=0.25)
+
+        # Optional: keep CDF x-range consistent with "lims should be 1"
+        #ax.set_xlim(-1, 1)
+
+    do_row(axes[0], critic, "Critic")
+    do_row(axes[1], policy, "Policy")
+
+    if suptitle:
+        fig.suptitle(suptitle, y=.98)
+    fig.tight_layout(rect=[0, 0, 1, 0.97])
+
+    plt.show(block=False)
+    # Pause until you command it to continue
+    input("Figure shown. Press Enter to continue...")
+
+    #plt.close(fig)
+
+
+
 
 def initialize_weights(m, sparsity=0.9):
     if isinstance(m, nn.Linear):
@@ -173,6 +255,7 @@ class StreamAC(nn.Module):
         params = network.parameters()
         spec = spec or {}
         opt_name = spec.get('optimizer', 'none').strip().lower()
+        self.opt_name = opt_name
         if opt_name in ['none','monte_carlo']:
             return None
         
@@ -293,6 +376,13 @@ class StreamAC(nn.Module):
                 entrywise_normalization=entrywise_normalization, beta2=beta2
             )
         
+        if opt_name == 'obobasestats':
+            return OboBaseStats_Optimizer(
+                params, gamma=gamma, lamda=lamda, kappa=kappa,  weight_decay=weight_decay, delta_clip=delta_clip,  delta_norm=delta_norm, momentum=momentum,
+                entrywise_normalization=entrywise_normalization, beta2=beta2
+            )
+        
+        
         if opt_name == 'obometaopt':
             return OboMetaOpt_Optimizer(
                 params, gamma=gamma, lamda=lamda, kappa=kappa,  weight_decay=weight_decay, delta_clip=delta_clip,  delta_norm=delta_norm, momentum=momentum,
@@ -395,6 +485,30 @@ class StreamAC(nn.Module):
                 "v(s)": float(v_s_obs.item()),
             }
 
+        if self.opt_name in ['obobasestats']:
+            critic_intended_update = self.optimizer_critic.eta * info_critic.get('safe_delta')
+            with torch.no_grad():
+                v_s_after_update = self.v(s)
+                critic_actual_update = v_s_after_update.item() - v_s.item()
+
+            policy_intended_update = self.optimizer_policy.eta * info_policy.get('safe_delta')
+            with torch.no_grad():
+                policy_objective_before_update = (log_prob_pi + entropy_pi).item()
+
+                mu__, std__ = self.pi(s)
+                dist__ = Normal(mu__, std__)
+                log_prob_pi__ = (dist__.log_prob(a)).sum()
+                entropy_pi__ = self.entropy_coeff * dist__.entropy().sum() * torch.sign(delta_policy).item()
+                policy_objective_after_update = (log_prob_pi__ + entropy_pi__).item()   
+
+                policy_actual_update = policy_objective_after_update - policy_objective_before_update
+
+            info_policy['policy_intended_update'] = policy_intended_update
+            info_policy['policy_actual_update'] = policy_actual_update
+            info_policy['policy_update_ratio'] = policy_actual_update /  (policy_intended_update + 1e-12)
+            info_critic['critic_intended_update'] = critic_intended_update  
+            info_critic['critic_actual_update'] = critic_actual_update
+            info_critic['critic_update_ratio'] = critic_actual_update / (critic_intended_update + 1e-12)
 
         # # Logging:
         # info_policy = {**(info_policy or {}),
@@ -512,6 +626,19 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
 
         step_info = agent.update_params(s, a, r, s_prime, terminated, truncated,)
         s = s_prime
+
+        if agent.opt_name in ['obobasestats']:
+            tt = (t-1) % 100_000
+            if tt == 0:
+                critic_list=[]
+                policy_list=[]
+            if tt<10_000-1:
+                critic_list.append([step_info['critic'].get('critic_intended_update'), step_info['critic'].get('critic_actual_update'), step_info['critic'].get('critic_update_ratio'), np.log10(step_info['critic'].get('step_size')+1e-12)])
+                policy_list.append([step_info['policy'].get('policy_intended_update'), step_info['policy'].get('policy_actual_update'), step_info['policy'].get('policy_update_ratio'), np.log10(step_info['policy'].get('step_size')+1e-12)])
+            if tt == 10_000-1:
+                plot_lists(critic_list, policy_list, bins=40, suptitle=f"Env:{env_name},        Data from steps: {t-10_000} to {t},        Return of Last episode:{int(ep_return)}")
+
+
 
         for net in ['critic', 'observer']:
             list_ep_v[net].append(step_info[net].get('v(s)',0.0))
@@ -648,7 +775,7 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
 
 
 if __name__ == '__main__':
-    optimizer_choices = ['ObGD', 'Obo', 'OboBase', 'OboMetaOpt', 'OboMetaZero', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD', 'ObtC', 'ObtN', 'Obt', 'Obtnnz', 'Obonz', 'ObGDN', 'ObGDm', 'ObtCm', 'Obtm', 'OboC']
+    optimizer_choices = ['ObGD', 'Obo', 'OboBase', 'OboBaseStats', 'OboMetaOpt', 'OboMetaZero', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD', 'ObtC', 'ObtN', 'Obt', 'Obtnnz', 'Obonz', 'ObGDN', 'ObGDm', 'ObtCm', 'Obtm', 'OboC']
     parser = argparse.ArgumentParser(description='Stream AC(λ)')
     parser.add_argument('--env_name', type=str, default='Ant-v5')  # HalfCheetah-v4
     parser.add_argument('--seed', type=int, default=0)
@@ -773,6 +900,7 @@ if __name__ == '__main__':
         'Obo':          shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'delta_clip', 'delta_norm', 'momentum', 'u_trace'],
         'OboC':         shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'momentum', 'u_trace'],
         'OboBase':      shared_params + ['entrywise_normalization', 'beta2', 'delta_clip', 'delta_norm', 'momentum'],
+        'OboBaseStats': shared_params + ['entrywise_normalization', 'beta2', 'delta_clip', 'delta_norm', 'momentum'],
         'OboMetaOpt':   shared_params + ['entrywise_normalization', 'beta2', 'delta_clip', 'delta_norm', 'momentum'] + ['meta_stepsize', 'beta2_meta', 'stepsize_parameterization', 'h_decay_meta'],
         'OboMetaZero':   shared_params + ['entrywise_normalization', 'beta2', 'delta_clip', 'delta_norm', 'momentum'] + ['meta_stepsize', 'beta2_meta', 'stepsize_parameterization', 'epsilon_meta', 'meta_loss_type', 'meta_shadow_dist_reg'],
         }
