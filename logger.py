@@ -83,6 +83,7 @@ class _WandbLogger_offline:
             config=config or {},
             mode="offline",
             dir=log_dir,
+            settings=wandb.Settings(_disable_stats=True) # this line disables wandb's system performance tracking
         )
 
     def log(self, metrics: Dict, step: Optional[int] = None):

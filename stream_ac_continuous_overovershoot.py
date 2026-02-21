@@ -127,7 +127,7 @@ def initialize_weights(m, sparsity=0.9):
         sparse_init(m.weight, sparsity=sparsity)
         m.bias.data.fill_(0.0)
 
-class Actor(nn.Module):
+class Actor_old(nn.Module):
     def __init__(self, n_obs=11, n_actions=3, hidden_depth=2, hidden_width=128, initialization_sparsity=0.9):
         super(Actor, self).__init__()
         self.fc_layer   = nn.Linear(n_obs, hidden_width)
@@ -149,7 +149,54 @@ class Actor(nn.Module):
         std = F.softplus(pre_std)
         return mu, std
 
+class Actor(nn.Module):
+    def __init__(self, n_obs=11, n_actions=3, hidden_depth=2, hidden_width=128, initialization_sparsity=0.9):
+        super(Actor, self).__init__()
+        self.fc_layer = nn.Linear(n_obs, hidden_width)
+        self.hidden_layers = nn.ModuleList([
+            nn.Linear(hidden_width, hidden_width) for _ in range(hidden_depth-1)
+        ])
+        self.linear_mu = nn.Linear(hidden_width, n_actions)
+        self.linear_std = nn.Linear(hidden_width, n_actions)
+        self.apply(partial(initialize_weights, sparsity=initialization_sparsity))
+
+    def forward(self, x):
+        x = self.fc_layer(x)
+        x = F.layer_norm(x, [x.size(-1)]) # Normalize only over the feature dimension
+        x = F.leaky_relu(x)
+        for hidden_layer in self.hidden_layers:
+            x = hidden_layer(x)
+            x = F.layer_norm(x, [x.size(-1)]) # Normalize only over the feature dimension
+            x = F.leaky_relu(x)
+            
+        mu = self.linear_mu(x)
+        pre_std = self.linear_std(x)
+        std = F.softplus(pre_std) + 1e-8 # Add epsilon to prevent NaN errors from zero standard deviation
+        return mu, std
+
 class Critic(nn.Module):
+    def __init__(self, n_obs=11, hidden_depth=2, hidden_width=128, initialization_sparsity=0.9):
+        super(Critic, self).__init__()
+        self.fc_layer = nn.Linear(n_obs, hidden_width)
+        self.hidden_layers = nn.ModuleList([
+            nn.Linear(hidden_width, hidden_width) for _ in range(hidden_depth-1)
+        ])
+        self.linear_layer = nn.Linear(hidden_width, 1)
+        self.apply(partial(initialize_weights, sparsity=initialization_sparsity))
+
+    def forward(self, x):
+        x = self.fc_layer(x)
+        x = F.layer_norm(x, [x.size(-1)]) # Normalize only over the feature dimension
+        x = F.leaky_relu(x)
+        
+        for hidden_layer in self.hidden_layers:
+            x = hidden_layer(x)
+            x = F.layer_norm(x, [x.size(-1)]) # Normalize only over the feature dimension
+            x = F.leaky_relu(x)
+            
+        return self.linear_layer(x)
+
+class Critic_old(nn.Module):
     def __init__(self, n_obs=11, hidden_depth=2, hidden_width=128, initialization_sparsity=0.9):
         super(Critic, self).__init__()
         self.fc_layer   = nn.Linear(n_obs, hidden_width)
@@ -490,7 +537,8 @@ class StreamAC(nn.Module):
             with torch.no_grad():
                 v_s_after_update = self.v(s)
                 critic_actual_update = v_s_after_update.item() - v_s.item()
-
+                criterion_value = critic_actual_update / (critic_intended_update + 1e-12)
+            print(criterion_value.item())
             policy_intended_update = self.optimizer_policy.eta * info_policy.get('safe_delta')
             with torch.no_grad():
                 policy_objective_before_update = (log_prob_pi + entropy_pi).item()

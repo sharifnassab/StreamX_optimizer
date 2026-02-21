@@ -8,6 +8,152 @@ from MetaZero_loss_calculation import error_critic
 
 
 
+class OboMetaZero2sided(): 
+    def __init__(self, network, role, gamma=0.99, lamda=0.0, kappa=2.0, entropy_coeff=0.01, delta_clip='none', delta_norm='none', beta2=0.999,  rmspower=2.0, entrywise_normalization='none', 
+            weight_decay=0.0, momentum=0.0, meta_stepsize=1e-3, beta2_meta=0.999, stepsize_parameterization='exp', epsilon_meta=1e-3, meta_loss_type='none', meta_shadow_dist_reg=0.0, clip_zeta_meta='none'):
+        self.opt_type = 'OboMetaZero'
+        self.role = role
+
+        self.net = network
+        self.net_shadow = deepcopy(network)
+
+        self.optimizer =        OboBase(self.net.parameters(), gamma=gamma, lamda=lamda, kappa=kappa, delta_clip=delta_clip, delta_norm=delta_norm, beta2=beta2, rmspower=rmspower, entrywise_normalization=entrywise_normalization, weight_decay=weight_decay, momentum=momentum)
+        self.optimizer_shadow = OboBase(self.net_shadow.parameters(), gamma=gamma, lamda=lamda, kappa=kappa, delta_clip=delta_clip, delta_norm=delta_norm, beta2=beta2, rmspower=rmspower, entrywise_normalization=entrywise_normalization, weight_decay=weight_decay, momentum=momentum)  
+
+        self.gamma = gamma
+        self.entropy_coeff = entropy_coeff if role=='policy' else None
+        self.meta_stepsize = meta_stepsize
+        self.beta2_meta = beta2_meta
+        self.epsilon_meta = epsilon_meta
+        self.stepsize_parameterization = activation_function(stepsize_parameterization)
+        self.shadow_distance_regulizer_coeff = meta_shadow_dist_reg
+
+        self.update_meta_only_at_the_end_of_episodes = False
+        if role=='critic':
+            self.error_critic_main = error_critic(meta_loss_type=meta_loss_type, gamma=gamma)
+            self.error_critic_shadow = error_critic(meta_loss_type=meta_loss_type, gamma=gamma)
+            if meta_loss_type.split('__epEndOnly_')[-1].split('__')[0] in ['True', 'true', '1']:
+                self.update_meta_only_at_the_end_of_episodes = True
+
+        self.eta = torch.tensor(1.0/kappa)
+        self.zeta = activation_function_inverse(stepsize_parameterization, 1/kappa)
+        self.v_meta = 1.0
+        self.t_meta = 1
+        self.aggregate_beta2_meta = 1.0
+        self.end_time_of_last_episode = 0
+        self.clip_zeta_meta = clip_zeta_meta_function(clip_zeta_meta)
+
+    def policy_calculations(self, local_net, s, a, delta, importance_sampling=False, target_policy_prob=None):
+        mu, std = local_net(s)
+        dist = Normal(mu, std)
+
+        log_prob_pi = (dist.log_prob(a)).sum()
+        prob_pi = torch.exp(log_prob_pi)
+        if importance_sampling and target_policy_prob is not None:
+            IS_ = prob_pi.item()/target_policy_prob
+        else:            
+            IS_ = 1.0
+        pure_entropy = dist.entropy().sum()
+        entropy_pi = self.entropy_coeff * dist.entropy().sum() * torch.sign(torch.tensor(delta)).item()
+        local_net.zero_grad()
+        (IS_*log_prob_pi + entropy_pi).backward()
+
+        return prob_pi.item(), pure_entropy.item()
+    
+    def value_calculations(self, local_net, s, s_prime, r, terminated_mask_t):
+        with torch.no_grad():
+            v_prime = local_net(s_prime)
+        v_s = local_net(s)
+        with torch.no_grad():
+            td_target_critic = r + self.gamma * v_prime * terminated_mask_t
+            delta = td_target_critic - v_s
+        local_net.zero_grad()
+        v_s.backward()
+        return v_s.item(), v_prime.item(), delta.item()
+
+
+    def step(self, s, a, r, s_prime, terminated_mask_t, v_s, v_prime, delta, reset):
+        if self.role == 'critic':
+            # v_s, v_prime, delta = self.value_calculations(self.net, s, s_prime, r, terminated_mask_t)
+            # v_s_shadow, v_prime_shadow, delta_shadow = self.value_calculations(self.net_shadow, s, s_prime, r, terminated_mask_t)   
+            self.net.zero_grad()
+            v_s.backward()
+
+            with torch.no_grad():
+                v_prime_shadow = self.net_shadow(s_prime)
+            v_s_shadow = self.net_shadow(s)
+            with torch.no_grad():
+                td_target_critic_shadow = r + self.gamma * v_prime_shadow * terminated_mask_t
+                delta_shadow = (td_target_critic_shadow - v_s_shadow).item()
+            self.net_shadow.zero_grad()
+            v_s_shadow.backward()
+
+        elif self.role == 'policy':
+            delta_shadow = delta
+            prob_pi, entropy_pi = self.policy_calculations(self.net, s, a, delta, importance_sampling=False)
+            prob_pi_shadow, entropy_pi_shadow = self.policy_calculations(self.net_shadow, s, a, delta_shadow, importance_sampling=True, target_policy_prob=prob_pi)
+            
+            importance_sampling = prob_pi_shadow/prob_pi
+            
+        
+        info = self.optimizer.step(delta, reset=reset)
+        info_shadow = self.optimizer_shadow.step(delta_shadow, reset=reset)
+
+        # meta update
+        if self.role == 'critic':
+            error_main = self.error_critic_main.step(v_s.item(), v_prime.item(), r, v_prime.item(), reset)
+            error_shadow = self.error_critic_shadow.step(v_s_shadow.item(), v_prime_shadow.item(), r, v_prime.item(), reset)
+        elif self.role == 'policy':
+            delta_normalized = self.optimizer.delta_normalized
+            error_main = -(delta_normalized + self.entropy_coeff*entropy_pi)
+            error_shadow = -(importance_sampling*delta_normalized +  self.entropy_coeff*entropy_pi_shadow)
+
+        if reset or not self.update_meta_only_at_the_end_of_episodes:
+            self.t_meta += 1
+            meta_grad = (error_shadow-error_main)/self.epsilon_meta
+            self.v_meta =  self.v_meta + ((1-self.beta2_meta)/(1-self.beta2_meta**(self.t_meta-1))) * (meta_grad**2 - self.v_meta) 
+            self.zeta = self.zeta - self.meta_stepsize * meta_grad / (math.sqrt(self.v_meta) + 1e-8)
+            self.zeta = self.clip_zeta_meta(self.zeta)
+
+        # # time stretching implementation of episodic critic update
+        # self.t_meta += 1
+        # if reset and self.update_meta_only_at_the_end_of_episodes:
+        #     stretch_exponent = 2.0/3.0    # episode_length^stretch_exponent.  The logic is as follows: in case of brownian motion, exponent should be 0.5, and in case of linear growth, it should be 1.0. We use an exponent in between because we do not know the pattern in advance.
+        #     length_of_current_episode = self.t_meta - self.end_time_of_last_episode
+        #     stretched_ep_len = length_of_current_episode ** stretch_exponent
+        #     self.end_time_of_last_episode = self.t_meta + 0
+
+        #     stretched_beta2_meta = self.beta2_meta ** stretched_ep_len
+        #     stretched_meta_stepsize = self.meta_stepsize * stretched_ep_len
+        #     self.aggregate_beta2_meta *= stretched_beta2_meta
+
+        #     meta_grad = (error_shadow-error_main)/self.epsilon_meta
+        #     self.v_meta =  self.v_meta + ((1-stretched_beta2_meta)/(1-self.aggregate_beta2_meta)) * (meta_grad**2 - self.v_meta) 
+        #     self.zeta = self.zeta - stretched_meta_stepsize * meta_grad / (math.sqrt(self.v_meta) + 1e-8)
+        #     self.zeta = self.clip_zeta_meta(self.zeta)
+
+        # elif not self.update_meta_only_at_the_end_of_episodes:
+        #     meta_grad = (error_shadow-error_main)/self.epsilon_meta
+        #     self.v_meta =  self.v_meta + ((1-self.beta2_meta)/(1-self.beta2_meta**(self.t_meta-1))) * (meta_grad**2 - self.v_meta) 
+        #     self.zeta = self.zeta - self.meta_stepsize * meta_grad / (math.sqrt(self.v_meta) + 1e-8)
+        #     self.zeta = self.clip_zeta_meta(self.zeta)
+
+
+        self.eta = self.stepsize_parameterization(self.zeta)
+        self.optimizer.eta = self.eta
+        self.optimizer_shadow.eta = self.stepsize_parameterization(self.zeta + self.epsilon_meta)
+        
+        if self.shadow_distance_regulizer_coeff>0: # regularization to pull shadow netwrok toward main network
+            with torch.no_grad():
+                for param, param_shadow in zip(self.net.parameters(), self.net_shadow.parameters()):
+                    param_shadow.add_(param.data - param_shadow.data, alpha=self.shadow_distance_regulizer_coeff)
+            
+        
+        return {**info, **{f'{key}_shadow':info_shadow[key] for key in info_shadow}}
+
+
+
+
 class OboBaseStats(torch.optim.Optimizer): 
     def __init__(self, params, gamma=0.99, lamda=0.0, kappa=2.0, delta_clip='none', delta_norm='none', beta2=0.999, rmspower=2.0, entrywise_normalization='none', weight_decay=0.0, momentum=0.0):
         defaults = dict(gamma=gamma, lamda=lamda, beta2=beta2, rmspower=rmspower, beta_momentum=momentum)
@@ -15,7 +161,6 @@ class OboBaseStats(torch.optim.Optimizer):
         self.lamda = lamda
         self.eta = torch.tensor(1.0/kappa)
         self.weight_decay = weight_decay
-        self.u_bar = 0.0
         self.sigma = 0.0
         self.t_val = 0
         self.delta_norm=delta_norm
@@ -50,7 +195,6 @@ class OboBaseStats(torch.optim.Optimizer):
                 e.mul_(group["gamma"] * group["lamda"]).add_(p.grad)
                 z_sum += ((e.square() / v_hat).sum()).abs().item()
                 norm_grad += ((p.grad.square() / v_hat).sum()).abs().item()
-        
         self.sigma +=  (1-self.gamma*self.lamda) * (norm_grad-self.sigma)
         norm_normalizer = math.sqrt((self.sigma/(1-(self.gamma*self.lamda)**self.t_val)) + 1e-12) 
         z_normalizer = math.sqrt(z_sum/(1-(self.gamma*self.lamda)**self.t_val))
@@ -140,9 +284,23 @@ class OboMetaZero():
         (IS_*log_prob_pi + entropy_pi).backward()
 
         return prob_pi.item(), pure_entropy.item()
+    
+    def value_calculations(self, local_net, s, s_prime, r, terminated_mask_t):
+        with torch.no_grad():
+            v_prime = local_net(s_prime)
+        v_s = local_net(s)
+        with torch.no_grad():
+            td_target_critic = r + self.gamma * v_prime * terminated_mask_t
+            delta = td_target_critic - v_s
+        local_net.zero_grad()
+        v_s.backward()
+        return v_s.item(), v_prime.item(), delta.item()
+
 
     def step(self, s, a, r, s_prime, terminated_mask_t, v_s, v_prime, delta, reset):
         if self.role == 'critic':
+            # v_s, v_prime, delta = self.value_calculations(self.net, s, s_prime, r, terminated_mask_t)
+            # v_s_shadow, v_prime_shadow, delta_shadow = self.value_calculations(self.net_shadow, s, s_prime, r, terminated_mask_t)   
             self.net.zero_grad()
             v_s.backward()
 

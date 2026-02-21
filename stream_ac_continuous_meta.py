@@ -48,41 +48,48 @@ def initialize_weights(m, sparsity=0.9):
 class Actor(nn.Module):
     def __init__(self, n_obs=11, n_actions=3, hidden_depth=2, hidden_width=128, initialization_sparsity=0.9):
         super(Actor, self).__init__()
-        self.fc_layer   = nn.Linear(n_obs, hidden_width)
-        self.hidden_layers = [nn.Linear(hidden_width, hidden_width) for _ in range(hidden_depth-1)]
+        self.fc_layer = nn.Linear(n_obs, hidden_width)
+        self.hidden_layers = nn.ModuleList([
+            nn.Linear(hidden_width, hidden_width) for _ in range(hidden_depth-1)
+        ])
         self.linear_mu = nn.Linear(hidden_width, n_actions)
         self.linear_std = nn.Linear(hidden_width, n_actions)
         self.apply(partial(initialize_weights, sparsity=initialization_sparsity))
 
     def forward(self, x):
         x = self.fc_layer(x)
-        x = F.layer_norm(x, x.size())
+        x = F.layer_norm(x, [x.size(-1)]) # Normalize only over the feature dimension
         x = F.leaky_relu(x)
         for hidden_layer in self.hidden_layers:
             x = hidden_layer(x)
-            x = F.layer_norm(x, x.size())
+            x = F.layer_norm(x, [x.size(-1)]) # Normalize only over the feature dimension
             x = F.leaky_relu(x)
+            
         mu = self.linear_mu(x)
         pre_std = self.linear_std(x)
-        std = F.softplus(pre_std)
+        std = F.softplus(pre_std) + 1e-8 # Add epsilon to prevent NaN errors from zero standard deviation
         return mu, std
 
 class Critic(nn.Module):
     def __init__(self, n_obs=11, hidden_depth=2, hidden_width=128, initialization_sparsity=0.9):
         super(Critic, self).__init__()
-        self.fc_layer   = nn.Linear(n_obs, hidden_width)
-        self.hidden_layers = [nn.Linear(hidden_width, hidden_width) for _ in range(hidden_depth-1)]
-        self.linear_layer  = nn.Linear(hidden_width, 1)
+        self.fc_layer = nn.Linear(n_obs, hidden_width)
+        self.hidden_layers = nn.ModuleList([
+            nn.Linear(hidden_width, hidden_width) for _ in range(hidden_depth-1)
+        ])
+        self.linear_layer = nn.Linear(hidden_width, 1)
         self.apply(partial(initialize_weights, sparsity=initialization_sparsity))
 
     def forward(self, x):
         x = self.fc_layer(x)
-        x = F.layer_norm(x, x.size())
+        x = F.layer_norm(x, [x.size(-1)]) # Normalize only over the feature dimension
         x = F.leaky_relu(x)
+        
         for hidden_layer in self.hidden_layers:
             x = hidden_layer(x)
-            x = F.layer_norm(x, x.size())
+            x = F.layer_norm(x, [x.size(-1)]) # Normalize only over the feature dimension
             x = F.leaky_relu(x)
+            
         return self.linear_layer(x)
     
 
@@ -503,6 +510,10 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
     max_epoch_time = 0.0
     episode_number = 0
     epoch_start_time = time.time()
+
+    last_logged_time = -1
+    log_the_next_episode = True
+    log_once_k_steps = 25_000
     
 
     for t in range(1, int(total_steps) + 1):
@@ -585,7 +596,7 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
             #         'policy/delta_used_avg_abs':avg_abs_delta_used,
             #         'policy/delta_used_rms':avg_rms_delta_used,
             #     })
-            if episode_number%40==0:
+            if False and episode_number%40==0:
                 log_payload.update({
                     "network/policy_w_norm": compute_weight_norm(agent.policy_net),
                     "network/critic_w_norm": compute_weight_norm(agent.critic_net),
@@ -602,9 +613,21 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
                     "observer_prediction/episode_abs_end_of_episode_W":  float(ep_pred_error_end_of_episode_W['ep_abs_error']),
                     "observer_prediction/episode_RMSE_end_of_episode_W": float(np.sqrt(ep_pred_error_end_of_episode_W['ep_MSE_error'])),
                 })
-            logging_frequency = 10 if logging_level in ['light'] else 1 if logging_level in ['heavy'] else 1
-            if episode_number%logging_frequency==0:
+            
+
+            
+            # if episode_number%logging_frequency==0:
+            if log_the_next_episode or (logging_level in ['heavy']):
                 logger.log(log_payload, step=t)
+                 
+                log_the_next_episode = False
+                last_logged_time = t+0
+
+            if t//log_once_k_steps > last_logged_time//log_once_k_steps:  # decision of logging next episode is independent of next episode length
+                log_the_next_episode = True
+            
+
+            
 
 
             if debug:
