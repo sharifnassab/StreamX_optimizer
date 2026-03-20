@@ -3,7 +3,7 @@ from _slurm_generator import generate_slurm
 
 RESOURCE_DEFAULTS = {
     "account":  "def-sutton",
-    "max_time": "10:00:00",
+    "max_time": "11:00:00",
     "cpus":     1,
     "mem":     '2G',
     "gpus":    '0',   #  v100:1,  0
@@ -15,7 +15,7 @@ RESOURCE_OVERRIDES = {
 }
 
 #PYTHON_ENTRYPOINT = "stream_ac_continuous.py"
-PYTHON_ENTRYPOINT = "stream_ac_continuous_meta.py"
+PYTHON_ENTRYPOINT = "stream_ac_continuous_meta_neat.py"
 
 COMMON_ENV = {
     #"env_name":            "Ant-v5",
@@ -62,6 +62,8 @@ seeds = [i for i in range(10)]
 if False:  # ObGD - ObGD (standard)
     HYPER_SWEEPS.append({
         "env_name":             environments,
+        "policy_activation":    ['softplus'],
+        "critic_activation":    ['softplus'],
         "policy_optimizer":     ['ObGD'],
         "policy_kappa":         [3], # 3 is optimum consistently
         "policy_entropy_coeff": [0.01],
@@ -76,10 +78,12 @@ if True:  # Obo - Obo (standard)
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['OboBase'],
+        "policy_activation":    ['softplus'],
         "policy_lamda":         [0.8],
         "policy_kappa":         [20],
         #
         "critic_optimizer":     ['OboBase'],
+        "critic_activation":    ['softplus'], 
         "critic_lamda":         [0.8],
         "critic_kappa":         [2.0],
         "seed":                 seeds,
@@ -87,16 +91,18 @@ if True:  # Obo - Obo (standard)
     })
 
 
-if True:  # Obo - Obo (cubic trace)
+if False:  # Obo - Obo (cubic trace)
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['OboBase'],
+        "policy_activation":    ['softplus'],
         "policy_lamda":         [0.8],
         "policy_kappa":         [20],
         "policy_beta2":         [0.9999],
         "policy_rmspower":      [3.0],
         #
         "critic_optimizer":     ['OboBase'],
+        "critic_activation":    ['softplus'],
         "critic_lamda":         [0.8],
         "critic_kappa":         [2.0],
         "critic_beta2":         [0.9999],
@@ -109,6 +115,8 @@ if True:  # Obo - Obo (cubic trace)
 if True:  # Obo - Obo (large network)
     HYPER_SWEEPS.append({
         "env_name":             environments,
+        "policy_activation":    ['softplus'],
+        "critic_activation":    ['softplus'],
         'critic_hidden_depth':  [4],
         'critic_hidden_width':  [256],
         'policy_hidden_depth':  [4],
@@ -125,9 +133,11 @@ if True:  # Obo - Obo (large network)
         ##"run_name":             [""],
     })
 
-if True:  # Obo - Obo (cubuic trace + large network) 
+if False:  # Obo - Obo (cubuic trace + large network) 
     HYPER_SWEEPS.append({
         "env_name":             environments,
+        "policy_activation":    ['softplus'],
+        "critic_activation":    ['softplus'],
         'critic_hidden_depth':  [4],
         'critic_hidden_width':  [256],
         'policy_hidden_depth':  [4],
@@ -149,36 +159,16 @@ if True:  # Obo - Obo (cubuic trace + large network)
     })
 
 
-if True:  # OboMetaZero - Obo (standard)
+if False:  # Obo - OboMetaZero (RG)
     HYPER_SWEEPS.append({
         "env_name":             environments,
-        "policy_optimizer":     ['OboMetaZero'],
-        "policy_lamda":         [0.8],
-        "policy_kappa":         [200],
-        "policy_meta_stepsize": [1e-4],
-        "policy_epsilon_meta":  [1e-3],
-        "policy_meta_shadow_dist_reg": [1e-3],
-        "policy_beta2_meta":    [0.999],
-        "policy_stepsize_parameterization": ['exp'],
-        "policy_clip_zeta_meta": ['none'],  # 'none', 'etaMin_0.005_etaMax_0.5'
-        #
-        "critic_optimizer":     ['OboBase'],
-        "critic_lamda":         [0.8],
-        "critic_kappa":         [2.0],
-        "seed":                 seeds,
-        ##"run_name":             [""],
-    })
-
-
-
-# if True:  # Obo - OboMetaZero (standard)
-    HYPER_SWEEPS.append({
-        "env_name":             environments,
+        "policy_activation":    ['softplus'],
         "policy_optimizer":     ['OboBase'],
         "policy_lamda":         [0.8],
         "policy_kappa":         [20],
         #
         "critic_optimizer":     ['OboMetaZero'],
+        "critic_activation":    ['softplus'],
         "critic_lamda":         [0.8],
         "critic_kappa":         [100.0],
         "critic_meta_stepsize": [1e-4],
@@ -193,40 +183,45 @@ if True:  # OboMetaZero - Obo (standard)
     })
 
 
-if True:  # Obo - OboMetaZero (standard)
+
+
+if True:  # OboMetaZero - Obo (best setting)
     HYPER_SWEEPS.append({
         "env_name":             environments,
-        "policy_optimizer":     ['OboBase'],
+        "policy_optimizer":     ['OboMetaZero'],
+        "policy_activation":    ['softplus'],
         "policy_lamda":         [0.8],
-        "policy_kappa":         [20],
+        "policy_kappa":         [200],
+        "policy_meta_stepsize": [1e-4],
+        "policy_epsilon_meta":  [1e-3, 1e-2],
+        "policy_meta_shadow_dist_reg": [1e-3],
+        "policy_beta2_meta":    [0.999],
+        "policy_stepsize_parameterization": ['exp'],
+        "policy_clip_zeta_meta": ['none'],  # 'none', 'etaMin_0.005_etaMax_0.5'
         #
-        "critic_optimizer":     ['OboMetaZero'],
+        "critic_optimizer":     ['OboBase'],
+        "critic_activation":    ['softplus'],
         "critic_lamda":         [0.8],
-        "critic_kappa":         [100.0],
-        "critic_meta_stepsize": [0.02],
-        "critic_epsilon_meta":  [0.02],
-        "critic_beta2_meta":    [0.99],
-        "critic_stepsize_parameterization": ['exp'],
-        "critic_meta_loss_type":            ['MC__mu_0.9999__epEndOnly_True__epContagious_False'],
-        "critic_meta_shadow_dist_reg":      [1e-3],
-        "critic_clip_zeta_meta":            ['none'], # 'etaMin_0.01_etaMax_1.0'
+        "critic_kappa":         [2.0],
         "seed":                 seeds,
         ##"run_name":             [""],
     })
 
 
-if True:  # Obo - OboMetaZero (standard)
+if True:  # Obo - OboMetaZero (best setting)
     HYPER_SWEEPS.append({
         "env_name":             environments,
+        "policy_activation":    ['softplus'],
         "policy_optimizer":     ['OboBase'],
         "policy_lamda":         [0.8],
         "policy_kappa":         [20],
         #
         "critic_optimizer":     ['OboMetaZero'],
+        "critic_activation":    ['softplus'],
         "critic_lamda":         [0.8],
-        "critic_kappa":         [2.0],
+        "critic_kappa":         [100.0],
         "critic_meta_stepsize": [0.01],
-        "critic_epsilon_meta":  [0.01, 0.02],
+        "critic_epsilon_meta":  [0.01],
         "critic_beta2_meta":    [0.99],
         "critic_stepsize_parameterization": ['exp'],
         "critic_meta_loss_type":            ['MC__mu_0.9999__epEndOnly_True__epContagious_False'],
