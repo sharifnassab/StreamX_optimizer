@@ -61,8 +61,8 @@ class Actor(nn.Module):
             self.activation = F.leaky_relu
         elif activation == 'softplus':
             self.activation = F.softplus
-        elif self.activation == 'leaky_softplus':
-            activation = leaky_softplus()
+        elif activation == 'leaky_softplus':
+            self.activation = leaky_softplus()
         else:
             raise ValueError(f"Unknown activation '{activation}'")
         
@@ -97,8 +97,8 @@ class Critic(nn.Module):
             self.activation = F.leaky_relu
         elif activation == 'softplus':
             self.activation = F.softplus
-        elif self.activation == 'leaky_softplus':
-            activation = leaky_softplus()
+        elif activation == 'leaky_softplus':
+            self.activation = leaky_softplus()
         else:
             raise ValueError(f"Unknown activation '{activation}'")
 
