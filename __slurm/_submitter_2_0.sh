@@ -4,7 +4,7 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=2048M
 #SBATCH --array=1-240
-#SBATCH --output=/home/asharif/scratch/StreamX_optimizer/outputs/2026_03_20__23_42_48___/2_0/output_%j.txt
+#SBATCH --output=/home/asharif/scratch/StreamX_optimizer/outputs/2026_03_21__00_06_06___/2_0/output_%j.txt
 #SBATCH --constraint=granite
 
 module purge
@@ -16,7 +16,7 @@ source ~/venv_streamx/bin/activate
 export PYTHONNOUSERSITE=1
 
 
-$(sed -n "${SLURM_ARRAY_TASK_ID}p" < /home/asharif/scratch/StreamX_optimizer/outputs/2026_03_20__23_42_48___/export_2_0.dat)
+$(sed -n "${SLURM_ARRAY_TASK_ID}p" < /home/asharif/scratch/StreamX_optimizer/outputs/2026_03_21__00_06_06___/export_2_0.dat)
 echo "Task ${SLURM_ARRAY_TASK_ID} started on $(hostname) at $(date)"
 python3 stream_ac_continuous_meta_neat.py --total_steps=$total_steps --policy_gamma=$policy_gamma --policy_entropy_coeff=$policy_entropy_coeff --policy_entrywise_normalization=$policy_entrywise_normalization --policy_beta2=$policy_beta2 --policy_delta_clip=$policy_delta_clip --policy_delta_norm=$policy_delta_norm --policy_momentum=$policy_momentum --policy_lr=$policy_lr --critic_gamma=$critic_gamma --critic_entrywise_normalization=$critic_entrywise_normalization --critic_beta2=$critic_beta2 --critic_delta_clip=$critic_delta_clip --critic_lr=$critic_lr --observer_optimizer=$observer_optimizer --log_backend=$log_backend --log_dir=$log_dir --log_dir_for_pickle=$log_dir_for_pickle --logging_level=$logging_level --project=$project --env_name=$env_name --policy_optimizer=$policy_optimizer --policy_activation=$policy_activation --policy_lamda=$policy_lamda --policy_kappa=$policy_kappa --policy_meta_stepsize=$policy_meta_stepsize --policy_epsilon_meta=$policy_epsilon_meta --policy_meta_shadow_dist_reg=$policy_meta_shadow_dist_reg --policy_beta2_meta=$policy_beta2_meta --policy_stepsize_parameterization=$policy_stepsize_parameterization --policy_clip_zeta_meta=$policy_clip_zeta_meta --critic_optimizer=$critic_optimizer --critic_activation=$critic_activation --critic_lamda=$critic_lamda --critic_kappa=$critic_kappa --seed=$seed --max_time=$max_time --uID=$uID
 echo "Program test finished with exit code $? at: `date`"
