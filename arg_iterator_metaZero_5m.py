@@ -78,12 +78,28 @@ if True:  # Obo - Obo (standard)
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['OboBase'],
-        "policy_activation":    ['softplus'],
+        "policy_activation":    ['leaky_softplus'],
         "policy_lamda":         [0.8],
         "policy_kappa":         [20],
         #
         "critic_optimizer":     ['OboBase'],
-        "critic_activation":    ['softplus'], 
+        "critic_activation":    ['leaky_softplus'], 
+        "critic_lamda":         [0.8],
+        "critic_kappa":         [2.0],
+        "seed":                 seeds,
+        ##"run_name":             [""],
+    })
+
+if True:  # Obo - Obo (standard)
+    HYPER_SWEEPS.append({
+        "env_name":             environments,
+        "policy_optimizer":     ['OboBase'],
+        "policy_activation":    ['relu'],
+        "policy_lamda":         [0.8],
+        "policy_kappa":         [20],
+        #
+        "critic_optimizer":     ['OboBase'],
+        "critic_activation":    ['relu'], 
         "critic_lamda":         [0.8],
         "critic_kappa":         [2.0],
         "seed":                 seeds,
@@ -112,7 +128,7 @@ if False:  # Obo - Obo (cubic trace)
     })
 
 
-if True:  # Obo - Obo (large network)
+if False:  # Obo - Obo (large network)
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_activation":    ['softplus'],
@@ -189,18 +205,18 @@ if True:  # OboMetaZero - Obo (best setting)
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['OboMetaZero'],
-        "policy_activation":    ['softplus'],
+        "policy_activation":    ['leaky_softplus'],
         "policy_lamda":         [0.8],
         "policy_kappa":         [200],
         "policy_meta_stepsize": [1e-4],
         "policy_epsilon_meta":  [1e-3, 1e-2],
-        "policy_meta_shadow_dist_reg": [1e-3],
+        "policy_meta_shadow_dist_reg": [1e-3, 1e-2],
         "policy_beta2_meta":    [0.999],
         "policy_stepsize_parameterization": ['exp'],
         "policy_clip_zeta_meta": ['none'],  # 'none', 'etaMin_0.005_etaMax_0.5'
         #
         "critic_optimizer":     ['OboBase'],
-        "critic_activation":    ['softplus'],
+        "critic_activation":    ['leaky_softplus'],
         "critic_lamda":         [0.8],
         "critic_kappa":         [2.0],
         "seed":                 seeds,
@@ -208,7 +224,7 @@ if True:  # OboMetaZero - Obo (best setting)
     })
 
 
-if True:  # Obo - OboMetaZero (best setting)
+if False:  # Obo - OboMetaZero (best setting)
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_activation":    ['softplus'],

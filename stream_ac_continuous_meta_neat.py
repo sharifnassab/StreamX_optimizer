@@ -34,10 +34,19 @@ def initialize_weights(m, sparsity=0.9):
         sparse_init(m.weight, sparsity=sparsity)
         m.bias.data.fill_(0.0)
 
+class leaky_softplus(nn.Module):
+    def __init__(self, alpha=0.01):
+        super().__init__()
+        self.alpha = alpha
+
+    def forward(self, x):
+        # Softplus is the smooth version of ReLU
+        # We blend a linear term with softplus to get the leaky effect
+        return self.alpha * x + (1 - self.alpha) * F.softplus(x)
+
 class Actor(nn.Module):
     def __init__(self, n_obs=11, n_actions=3, hidden_depth=2, hidden_width=128, activation='leaky_relu', initialization_sparsity=0.9):
         super(Actor, self).__init__()
-        self.activation = activation
         self.fc_layer = nn.Linear(n_obs, hidden_width)
         self.hidden_layers = nn.ModuleList([
             nn.Linear(hidden_width, hidden_width) for _ in range(hidden_depth-1)
@@ -46,24 +55,27 @@ class Actor(nn.Module):
         self.linear_std = nn.Linear(hidden_width, n_actions)
         self.apply(partial(initialize_weights, sparsity=initialization_sparsity))
 
+        if activation == 'relu':
+            self.activation = F.relu
+        elif activation == 'leaky_relu':
+            self.activation = F.leaky_relu
+        elif activation == 'softplus':
+            self.activation = F.softplus
+        elif self.activation == 'leaky_softplus':
+            activation = leaky_softplus()
+        else:
+            raise ValueError(f"Unknown activation '{activation}'")
+        
     def forward(self, x):
         x = self.fc_layer(x)
         x = F.layer_norm(x, [x.size(-1)]) # Normalize only over the feature dimension
-        if self.activation == 'leaky_relu':
-            x = F.leaky_relu(x)
-        elif self.activation == 'softplus':
-            x = F.softplus(x)
-        else:
-            raise ValueError(f"Unknown activation '{self.activation}'")
+        x = self.activation(x)
+        
         for hidden_layer in self.hidden_layers:
             x = hidden_layer(x)
             x = F.layer_norm(x, [x.size(-1)]) # Normalize only over the feature dimension
-            if self.activation == 'leaky_relu':
-                x = F.leaky_relu(x)
-            elif self.activation == 'softplus':
-                x = F.softplus(x)
+            x = self.activation(x)
             
-        
         mu = self.linear_mu(x)
         pre_std = self.linear_std(x)
         std = F.softplus(pre_std) + 1e-8 # Add epsilon to prevent NaN errors from zero standard deviation
@@ -72,7 +84,6 @@ class Actor(nn.Module):
 class Critic(nn.Module):
     def __init__(self, n_obs=11, hidden_depth=2, hidden_width=128, activation='leaky_relu', initialization_sparsity=0.9):
         super(Critic, self).__init__()
-        self.activation = activation
         self.fc_layer = nn.Linear(n_obs, hidden_width)
         self.hidden_layers = nn.ModuleList([
             nn.Linear(hidden_width, hidden_width) for _ in range(hidden_depth-1)
@@ -80,23 +91,26 @@ class Critic(nn.Module):
         self.linear_layer = nn.Linear(hidden_width, 1)
         self.apply(partial(initialize_weights, sparsity=initialization_sparsity))
 
+        if activation == 'relu':
+            self.activation = F.relu
+        elif activation == 'leaky_relu':
+            self.activation = F.leaky_relu
+        elif activation == 'softplus':
+            self.activation = F.softplus
+        elif self.activation == 'leaky_softplus':
+            activation = leaky_softplus()
+        else:
+            raise ValueError(f"Unknown activation '{activation}'")
+
     def forward(self, x):
         x = self.fc_layer(x)
         x = F.layer_norm(x, [x.size(-1)]) # Normalize only over the feature dimension
-        if self.activation == 'leaky_relu':
-            x = F.leaky_relu(x)
-        elif self.activation == 'softplus':
-            x = F.softplus(x)
-        else:
-            raise ValueError(f"Unknown activation '{self.activation}'")
-
+        x = self.activation(x)
+        
         for hidden_layer in self.hidden_layers:
             x = hidden_layer(x)
             x = F.layer_norm(x, [x.size(-1)]) # Normalize only over the feature dimension
-            if self.activation == 'leaky_relu':
-                x = F.leaky_relu(x)
-            elif self.activation == 'softplus':
-                x = F.softplus(x)
+            x = self.activation(x)
             
         return self.linear_layer(x)
     

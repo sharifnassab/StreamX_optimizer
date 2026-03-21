@@ -805,11 +805,14 @@ class RMSPropCore(torch.optim.Optimizer):
                 z_sum += ((e.square() / v_hat).sum()).abs().item()
                 norm_grad += ((p.grad.square() / v_hat).sum()).abs().item()
         
-        self.sigma +=  (1-self.gamma*self.lamda) * (norm_grad-self.sigma)
-        norm_normalizer = math.sqrt((self.sigma/(1-(self.gamma*self.lamda)**self.t_val)) + 1e-12) 
+        normalizer_decay_rate = 0.999
+        #normalizer_decay_rate = self.gamma*self.lamda
+
+        self.sigma +=   (1-normalizer_decay_rate) * (norm_grad-self.sigma)
+        norm_normalizer = math.sqrt((self.sigma/(1-normalizer_decay_rate**self.t_val)) + 1e-12) 
         z_normalizer = math.sqrt(z_sum/(1-(self.gamma*self.lamda)**self.t_val))
         normalizer_ = norm_normalizer * z_normalizer
-        step_size = 1
+        step_size = 1/norm_normalizer**2
         #print(self.eta/step_size)
 
         for group in self.param_groups:
