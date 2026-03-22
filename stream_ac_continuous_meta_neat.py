@@ -44,6 +44,16 @@ class leaky_softplus(nn.Module):
         # We blend a linear term with softplus to get the leaky effect
         return self.alpha * x + (1 - self.alpha) * F.softplus(x)
 
+class leaky_softplus10(nn.Module):
+    def __init__(self, alpha=0.01):
+        super().__init__()
+        self.alpha = alpha
+
+    def forward(self, x):
+        # Softplus is the smooth version of ReLU
+        # We blend a linear term with softplus to get the leaky effect
+        return self.alpha * x + (1 - self.alpha) * F.softplus(x,beta=10)
+
 class Actor(nn.Module):
     def __init__(self, n_obs=11, n_actions=3, hidden_depth=2, hidden_width=128, activation='leaky_relu', initialization_sparsity=0.9):
         super(Actor, self).__init__()
@@ -63,6 +73,8 @@ class Actor(nn.Module):
             self.activation = F.softplus
         elif activation == 'leaky_softplus':
             self.activation = leaky_softplus()
+        elif activation == 'leaky_softplus10':
+            self.activation = leaky_softplus10()
         else:
             raise ValueError(f"Unknown activation '{activation}'")
         
@@ -99,6 +111,8 @@ class Critic(nn.Module):
             self.activation = F.softplus
         elif activation == 'leaky_softplus':
             self.activation = leaky_softplus()
+        elif activation == 'leaky_softplus10':
+            self.activation = leaky_softplus10()
         else:
             raise ValueError(f"Unknown activation '{activation}'")
 
