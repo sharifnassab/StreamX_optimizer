@@ -684,7 +684,7 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
         s = s_prime
 
         if agent.opt_name in ['obobasestats']:
-            period_of_stat_computation = 1_0_000
+            period_of_stat_computation = 1_000_000
             tt = (t-1) % period_of_stat_computation
             if tt == 0:
 

@@ -3,7 +3,7 @@ from _slurm_generator import generate_slurm
 
 RESOURCE_DEFAULTS = {
     "account":  "def-sutton",
-    "max_time": "1:00:00",
+    "max_time": "10:00:00",
     "cpus":     1,
     "mem":     '4G',
     "gpus":    '0',   #  v100:1,  0
@@ -19,7 +19,7 @@ PYTHON_ENTRYPOINT = "stream_ac_continuous_overovershoot.py"
 
 COMMON_ENV = {
     #"env_name":         "Ant-v5",
-    "total_steps":      5_0_000,
+    "total_steps":      5_000_000,
     #
     "policy_gamma":     0.99,
     "policy_lr":        1.0,
@@ -34,7 +34,7 @@ COMMON_ENV = {
     #
     "log_backend":          "none",
     "log_dir":              "/home/asharif/scratch/StreamX_optimizer/WandB_offline", #"/home/asharif/StreamX_optimizer/WandB_offline",
-    "log_dir_for_pickle":   "/home/asharif/scratch/StreamX_optimizer/Pickles_ratio_test_testing",
+    "log_dir_for_pickle":   "/home/asharif/scratch/StreamX_optimizer/Pickles_ratio_test",
     "logging_level":        "light",      # "light" , "heavy"
     "project":              "StreamX_OptDesign_policy_5m_ratio_test",
 }
@@ -50,7 +50,7 @@ run_description = 'test0'
 HYPER_SWEEPS = []
 
 environments = ['Ant-v5', 'HalfCheetah-v5', 'Hopper-v5', 'Walker2d-v5', 'Humanoid-v5', 'HumanoidStandup-v5']
-seeds = [i for i in range(1)]
+seeds = [i for i in range(30)]
 
 
 if False:  # ObGD - ObGD (standard)
