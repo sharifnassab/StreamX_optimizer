@@ -201,10 +201,14 @@ class OboBaseStats(torch.optim.Optimizer):
         normalizer_ = norm_normalizer * z_normalizer
         step_size = 1 / normalizer_
 
+        norm_delta_w_before_delta = 0.0
         for group in self.param_groups:
             for p in group["params"]:
                 state = self.state[p]
                 e = state["eligibility_trace"]
+                if self.weight_decay > 0.0:
+                    p.data.mul_(1.0-self.eta*self.weight_decay)
+
                 if group["beta_momentum"]>0:
                     if "momentum" not in state:
                         state["momentum"] = torch.zeros_like(p.data)
@@ -214,21 +218,19 @@ class OboBaseStats(torch.optim.Optimizer):
                     else:
                         m.mul_(group["beta_momentum"]).add_(e, alpha= safe_delta * step_size * (1-group["beta_momentum"]))
                     delta_w = m
+                    p.data.add_(delta_w, alpha=self.eta)
                 else:
                     if self.entrywise_normalization.lower() == 'rmsprop':
-                        delta_w = safe_delta * step_size * e / state["rmsprop_v_hat"]
+                        delta_w_before_delta = step_size * e / state["rmsprop_v_hat"]
                     else:
-                        delta_w = safe_delta * step_size * e
-
-                if self.weight_decay > 0.0:
-                    p.data.mul_(1.0-self.eta*self.weight_decay)
-
-                p.data.add_(delta_w, alpha=self.eta)
-
+                        delta_w_before_delta = step_size * e
+                
+                    p.data.add_(delta_w_before_delta, alpha=self.eta * safe_delta)
+                    norm_delta_w_before_delta += (delta_w_before_delta.square().sum()).item()
                 if reset:
                     e.zero_()
 
-        info = {'step_size':float(step_size), 'norm_grad':float(norm_grad), 'z_sum':float(z_sum), 'delta':float(delta), 'safe_delta':float(safe_delta), 'abs_delta':float(abs(delta))}
+        info = {'norm_delta_w_before_delta': float(self.eta* norm_delta_w_before_delta**0.5), 'step_size':float(step_size), 'norm_grad':float(norm_grad), 'z_sum':float(z_sum), 'delta':float(delta), 'safe_delta':float(safe_delta), 'abs_delta':float(abs(delta))}
         return info
 
 

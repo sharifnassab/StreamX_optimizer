@@ -9,7 +9,7 @@ import gymnasium as gym
 import torch.nn.functional as F
 from torch.distributions import Normal
 from functools import partial
-#import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 from copy import deepcopy
 from optim import ObGD_sq as ObGDsq_Optimizer
 from optim import ObGD_sq_plain as ObGDsqPlain_Optimizer
@@ -40,86 +40,86 @@ from logger import get_logger
 print('All imports done. 2')  
 
 
-# def plot_lists(critic_list, policy_list, bins=30, suptitle=None):
-#     critic = np.asarray(critic_list, dtype=float)
-#     policy = np.asarray(policy_list, dtype=float)
+def plot_lists(critic_list, policy_list, bins=30, suptitle=None):
+    critic = np.asarray(critic_list, dtype=float)
+    policy = np.asarray(policy_list, dtype=float)
 
-#     if critic.ndim != 2 or critic.shape[1] != 4:
-#         raise ValueError(f"critic_list must be shape (N, 4). Got {critic.shape}.")
-#     if policy.ndim != 2 or policy.shape[1] != 4:
-#         raise ValueError(f"policy_list must be shape (N, 4). Got {policy.shape}.")
+    if critic.ndim != 2 or critic.shape[1] != 4:
+        raise ValueError(f"critic_list must be shape (N, 4). Got {critic.shape}.")
+    if policy.ndim != 2 or policy.shape[1] != 4:
+        raise ValueError(f"policy_list must be shape (N, 4). Got {policy.shape}.")
 
-#     fig, axes = plt.subplots(2, 2, figsize=(8, 7), constrained_layout=False)
+    fig, axes = plt.subplots(2, 2, figsize=(8, 7), constrained_layout=False)
 
-#     def do_row(ax_row, data, row_name):
-#         # Col 0: scatter (0 vs 1)
-#         ax = ax_row[0]
-#         ax.scatter(data[:, 0], data[:, 1], s=12, alpha=0.7)
-#         #ax.set_xlim(-1, 1)
-#         #ax.set_ylim(-1, 1)
-#         ax.axis('equal')
-#         ax.set_title(f"{row_name}: actual vs intended update")
-#         ax.set_xlabel("intended update")
-#         ax.set_ylabel("actual update")
-#         ax.grid(True, alpha=0.25)
+    def do_row(ax_row, data, row_name):
+        # Col 0: scatter (0 vs 1)
+        ax = ax_row[0]
+        ax.scatter(data[:, 0], data[:, 1], s=12, alpha=0.7)
+        #ax.set_xlim(-1, 1)
+        #ax.set_ylim(-1, 1)
+        ax.axis('equal')
+        ax.set_title(f"{row_name}: actual vs intended update")
+        ax.set_xlabel("intended update")
+        ax.set_ylabel("actual update")
+        ax.grid(True, alpha=0.25)
 
-#         # # Col 1: scatter (2 vs 3)
-#         # ax = ax_row[1]
-#         # ax.scatter(data[:, 3], data[:, 2], s=12, alpha=0.7)
-#         # #ax.set_xlim(-1, 1)
-#         # #ax.set_ylim(-1, 1)
-#         # ax.set_title(f"{row_name}: ratio (actual/intended) vs safe_delta")
-#         # ax.set_xlabel("safe_delta")
-#         # ax.set_ylabel("ratio (actual/intended)")
-#         # ax.grid(True, alpha=0.25)
+        # # Col 1: scatter (2 vs 3)
+        # ax = ax_row[1]
+        # ax.scatter(data[:, 3], data[:, 2], s=12, alpha=0.7)
+        # #ax.set_xlim(-1, 1)
+        # #ax.set_ylim(-1, 1)
+        # ax.set_title(f"{row_name}: ratio (actual/intended) vs safe_delta")
+        # ax.set_xlabel("safe_delta")
+        # ax.set_ylabel("ratio (actual/intended)")
+        # ax.grid(True, alpha=0.25)
 
-#         # Col 1: histogram of entry[2]
-#         ax = ax_row[1]
-#         x = data[:, 2]
-#         ax.hist(x, bins=bins, edgecolor="black", alpha=0.8)
-#         ax.set_title(f"{row_name}: hist of ratio (actual/intended)")
-#         ax.set_xlabel("ratio (actual/intended)")
-#         ax.set_ylabel("Histogram count")
-#         ax.grid(True, alpha=0.25)
+        # Col 1: histogram of entry[2]
+        ax = ax_row[1]
+        x = data[:, 2]
+        ax.hist(x, bins=bins, edgecolor="black", alpha=0.8)
+        ax.set_title(f"{row_name}: hist of ratio (actual/intended)")
+        ax.set_xlabel("ratio (actual/intended)")
+        ax.set_ylabel("Histogram count")
+        ax.grid(True, alpha=0.25)
 
-#         # # Col 2: Hist of alpha
-#         # ax = ax_row[2]
-#         # x = data[:, 3]
-#         # ax.hist(x, bins=bins, edgecolor="black", alpha=0.8)
-#         # ax.set_title(f"{row_name}: hist of log10(stepsize)")
-#         # ax.set_xlabel("log10(stepsize)")
-#         # ax.set_ylabel("Histogram count")
-#         # ax.grid(True, alpha=0.25)
+        # # Col 2: Hist of alpha
+        # ax = ax_row[2]
+        # x = data[:, 3]
+        # ax.hist(x, bins=bins, edgecolor="black", alpha=0.8)
+        # ax.set_title(f"{row_name}: hist of log10(stepsize)")
+        # ax.set_xlabel("log10(stepsize)")
+        # ax.set_ylabel("Histogram count")
+        # ax.grid(True, alpha=0.25)
 
         
 
-#         # # Col 3: CDF of entry[2]
-#         # ax = ax_row[3]
-#         # x = data[:, 2]
-#         # xs = np.sort(x)
-#         # cdf = np.arange(1, len(xs) + 1) / len(xs)
-#         # ax.plot(xs, cdf)
-#         # ax.set_title(f"{row_name}: CDF of ratio (actual/intended)")
-#         # ax.set_xlabel("ratio (actual/intended)")
-#         # ax.set_ylabel("CDF")
-#         # ax.set_ylim(0, 1)
-#         # ax.grid(True, alpha=0.25)
+        # # Col 3: CDF of entry[2]
+        # ax = ax_row[3]
+        # x = data[:, 2]
+        # xs = np.sort(x)
+        # cdf = np.arange(1, len(xs) + 1) / len(xs)
+        # ax.plot(xs, cdf)
+        # ax.set_title(f"{row_name}: CDF of ratio (actual/intended)")
+        # ax.set_xlabel("ratio (actual/intended)")
+        # ax.set_ylabel("CDF")
+        # ax.set_ylim(0, 1)
+        # ax.grid(True, alpha=0.25)
 
-#         # Optional: keep CDF x-range consistent with "lims should be 1"
-#         #ax.set_xlim(-1, 1)
+        # Optional: keep CDF x-range consistent with "lims should be 1"
+        #ax.set_xlim(-1, 1)
 
-#     do_row(axes[0], critic, "Critic")
-#     do_row(axes[1], policy, "Policy")
+    do_row(axes[0], critic, "Critic")
+    do_row(axes[1], policy, "Policy")
 
-#     if suptitle:
-#         fig.suptitle(suptitle, y=.98)
-#     fig.tight_layout(rect=[0, 0, 1, 0.97])
+    if suptitle:
+        fig.suptitle(suptitle, y=.98)
+    fig.tight_layout(rect=[0, 0, 1, 0.97])
 
-#     plt.show(block=False)
-#     # Pause until you command it to continue
-#     input("Figure shown. Press Enter to continue...")
+    plt.show(block=False)
+    # Pause until you command it to continue
+    input("Figure shown. Press Enter to continue...")
 
-#     #plt.close(fig)
+    #plt.close(fig)
 
 
 
@@ -559,7 +559,6 @@ class StreamAC(nn.Module):
             info_critic['critic_intended_update'] = critic_intended_update  
             info_critic['critic_actual_update'] = critic_actual_update
             info_critic['critic_update_ratio'] = critic_actual_update / (critic_intended_update + 1e-12)
-            
 
         # # Logging:
         # info_policy = {**(info_policy or {}),
@@ -667,11 +666,6 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
     episode_number = 0
     epoch_start_time = time.time()
     
-    stat_percentiles = [0,.001, .005, .01, 0.05, .1, 0.5, 0.9, 0.95, 0.99, 0.995, 0.999, 1]
-    global_stats_dict = {'critic':{**{'mean_update_ratio':[], 'mean_update_ratio_of_significant_updates':[], 'mean_log_update_ratio':[], 'mean_log_update_ratio_of_significant_updates':[], 'std_update_ratio':[], 'std_log_update_ratio':[], 'std_update_ratio_of_significant_updates':[], 'std_log_update_ratio_of_significant_updates':[]}, **{f'update_ratio_percentile/{percentile}': [] for percentile in stat_percentiles}, **{f'update_ratio_percentile_of_significant_updates/{percentile}': [] for percentile in stat_percentiles}, **{'dw_before_delta_mean':[]}, **{f'dw_before_delta_ratio_percentile/{percentile}': [] for percentile in stat_percentiles}, **{f'dw_before_delta_ratio_percentile_of_significant_updates/{percentile}': [] for percentile in stat_percentiles}}, 
-                         'policy':{**{'mean_update_ratio':[], 'mean_update_ratio_of_significant_updates':[], 'mean_log_update_ratio':[], 'mean_log_update_ratio_of_significant_updates':[], 'std_update_ratio':[], 'std_log_update_ratio':[], 'std_update_ratio_of_significant_updates':[], 'std_log_update_ratio_of_significant_updates':[]}, **{f'update_ratio_percentile/{percentile}': [] for percentile in stat_percentiles}, **{f'update_ratio_percentile_of_significant_updates/{percentile}': [] for percentile in stat_percentiles}, **{'dw_before_delta_mean':[]}, **{f'dw_before_delta_ratio_percentile/{percentile}': [] for percentile in stat_percentiles}, **{f'dw_before_delta_ratio_percentile_of_significant_updates/{percentile}': [] for percentile in stat_percentiles}}, 
-                         'logging_times':[],
-                         'returns':returns,}
 
     for t in range(1, int(total_steps) + 1):
         a = agent.sample_action(s)
@@ -684,41 +678,17 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
         s = s_prime
 
         if agent.opt_name in ['obobasestats']:
-            period_of_stat_computation = 1_0_000
-            tt = (t-1) % period_of_stat_computation
+            tt = (t-1) % 100_000
             if tt == 0:
+                critic_list=[]
+                policy_list=[]
+            if tt<10_000-1:
+                critic_list.append([step_info['critic'].get('critic_intended_update'), step_info['critic'].get('critic_actual_update'), step_info['critic'].get('critic_update_ratio'), np.log10(step_info['critic'].get('step_size')+1e-12)])
+                policy_list.append([step_info['policy'].get('policy_intended_update'), step_info['policy'].get('policy_actual_update'), step_info['policy'].get('policy_update_ratio'), np.log10(step_info['policy'].get('step_size')+1e-12)])
+            if tt == 10_000-1:
+                plot_lists(critic_list, policy_list, bins=40, suptitle=f"Env:{env_name},  Steps:{t-10_000} to {t},  Return of the last episode:{int(ep_return)}")
 
-                info_dict_for_stat = {'critic':{'intended_update':[], 'actual_update':[], 'update_ratio':[], 'log_step_size':[], 'dw_before_delta':[]},
-                                      'policy':{'intended_update':[], 'actual_update':[], 'update_ratio':[], 'log_step_size':[], 'dw_before_delta':[]}}
-            if tt<period_of_stat_computation-1:
-                for key in ['critic', 'policy']:
-                    info_dict_for_stat[key]['intended_update'].append(step_info[key].get(f'{key}_intended_update'))
-                    info_dict_for_stat[key]['actual_update'].append(step_info[key].get(f'{key}_actual_update'))
-                    info_dict_for_stat[key]['update_ratio'].append(step_info[key].get(f'{key}_update_ratio'))
-                    info_dict_for_stat[key]['log_step_size'].append(np.log10(step_info[key].get('step_size', 1e-12)))
-                    info_dict_for_stat[key]['dw_before_delta'].append(step_info[key].get('norm_delta_w_before_delta'))
-            if tt == period_of_stat_computation-1:
-                global_stats_dict['logging_times'].append(t)
-                for key in ['critic', 'policy']:
-                    mean_norm2_actual_update = np.sqrt(np.mean(np.square(info_dict_for_stat[key]['actual_update'])))
-                    significant_update_mask = np.abs(info_dict_for_stat[key]['actual_update']) > 0.1 * mean_norm2_actual_update
-                    global_stats_dict[key]['mean_update_ratio'].append(np.mean(info_dict_for_stat[key]['update_ratio']))
-                    global_stats_dict[key]['mean_update_ratio_of_significant_updates'].append(np.mean(np.array(info_dict_for_stat[key]['update_ratio'])[significant_update_mask]))
-                    global_stats_dict[key]['mean_log_update_ratio'].append(np.mean(np.log10(np.array(info_dict_for_stat[key]['update_ratio']) + 1e-12)))
-                    global_stats_dict[key]['mean_log_update_ratio_of_significant_updates'].append(np.mean(np.log10(np.array(info_dict_for_stat[key]['update_ratio'])[significant_update_mask] + 1e-12)))
-                    global_stats_dict[key]['std_update_ratio'].append(np.std(info_dict_for_stat[key]['update_ratio']))
-                    global_stats_dict[key]['std_log_update_ratio'].append(np.std(np.log10(np.array(info_dict_for_stat[key]['update_ratio']) + 1e-12)))
-                    global_stats_dict[key]['std_update_ratio_of_significant_updates'].append(np.std(np.array(info_dict_for_stat[key ]['update_ratio'])[significant_update_mask]))
-                    global_stats_dict[key]['std_log_update_ratio_of_significant_updates'].append(np.std(np.log10(np.array(info_dict_for_stat[key]['update_ratio'])[significant_update_mask] + 1e-12)))
-                    for percentile in stat_percentiles:
-                        global_stats_dict[key][f'update_ratio_percentile/{percentile}'].append(np.percentile(info_dict_for_stat[key]['update_ratio'], percentile*100))
-                        global_stats_dict[key][f'update_ratio_percentile_of_significant_updates/{percentile}'].append(np.percentile(np.array(info_dict_for_stat[key]['update_ratio'])[significant_update_mask], percentile*100))
-                    
-                    dw_before_delta_mean = np.mean(info_dict_for_stat[key]['dw_before_delta'])
-                    global_stats_dict[key]['dw_before_delta_mean'].append(dw_before_delta_mean)
-                    for percentile in stat_percentiles:
-                        global_stats_dict[key][f'dw_before_delta_ratio_percentile/{percentile}'].append(np.percentile(np.array(info_dict_for_stat[key]['dw_before_delta']), percentile*100) / dw_before_delta_mean)
-                        global_stats_dict[key][f'dw_before_delta_ratio_percentile_of_significant_updates/{percentile}'].append(np.percentile(np.array(info_dict_for_stat[key]['dw_before_delta'])[significant_update_mask], percentile*100) / dw_before_delta_mean)
+
 
         for net in ['critic', 'observer']:
             list_ep_v[net].append(step_info[net].get('v(s)',0.0))
@@ -778,8 +748,6 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
                 #"critic_prediction/episode_abs":  float(ep_pred_error_critic['ep_abs_error']),
                 "critic_prediction/episode_RMSE": float(np.sqrt(ep_pred_error_critic['ep_MSE_error'])),
             }
-            if episode_number%10==0:
-                global_stats_dict['returns'].append(ep_return)
 
             for step_size_type, val in [('eta_policy', eta_policy), ('eta_critic', eta_critic), ('zeta_policy', zeta_policy),  ('zeta_critic', zeta_critic)]:
                 if val is not None:
@@ -851,8 +819,7 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
         with open(os.path.join(save_dir, "seed_{}.pkl".format(seed)), "wb") as f:
-            #pickle.dump((returns, term_time_steps, env_name), f)
-            pickle.dump((global_stats_dict, env_name), f)
+            pickle.dump((returns, term_time_steps, env_name), f)
 
 
 
