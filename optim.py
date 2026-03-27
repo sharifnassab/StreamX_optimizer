@@ -230,7 +230,7 @@ class OboBaseStats(torch.optim.Optimizer):
                 if reset:
                     e.zero_()
 
-        info = {'norm_delta_w_before_delta': float(self.eta* norm_delta_w_before_delta**0.5), 'step_size':float(step_size), 'norm_grad':float(norm_grad), 'z_sum':float(z_sum), 'delta':float(delta), 'safe_delta':float(safe_delta), 'abs_delta':float(abs(delta))}
+        info = {'norm_delta_w_before_delta': float(self.eta* norm_delta_w_before_delta**0.5), 'norm_delta_w_before_delta_alpha1': float(self.eta* (norm_delta_w_before_delta**0.5)/step_size), 'step_size':float(step_size), 'norm_grad':float(norm_grad), 'z_sum':float(z_sum), 'delta':float(delta), 'safe_delta':float(safe_delta), 'abs_delta':float(abs(delta))}
         return info
 
 

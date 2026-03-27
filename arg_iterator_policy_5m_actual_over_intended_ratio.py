@@ -65,7 +65,7 @@ if False:  # ObGD - ObGD (standard)
         "seed":                 seeds,
     })
 
-if True:  # OboBaseStats - OboBaseStats (standard)
+if False:  # OboBaseStats - OboBaseStats (standard)
     HYPER_SWEEPS.append({
         "env_name":             environments,
         "policy_optimizer":     ['OboBaseStats'],
