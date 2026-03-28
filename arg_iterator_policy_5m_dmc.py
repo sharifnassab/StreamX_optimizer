@@ -3,7 +3,7 @@ from _slurm_generator import generate_slurm
 
 RESOURCE_DEFAULTS = {
     "account":  "def-sutton",
-    "max_time": "1:00:00",
+    "max_time": "10:00:00",
     "cpus":     1,
     "mem":     '4G',
     "gpus":    '0',   #  v100:1,  0
@@ -49,9 +49,9 @@ run_description = 'test0'
 
 HYPER_SWEEPS = []
 
-#environments = ['dm_control/finger-turn_easy-v0', 'dm_control/finger-turn_hard-v0','dm_control/dog-run-v0']
-environments = ['dm_control/dog-stand-v0']
-seeds = [i for i in range(1)]
+environments = ['dm_control/finger-turn_easy-v0', 'dm_control/finger-turn_hard-v0','dm_control/dog-run-v0']
+#environments = ['dm_control/dog-stand-v0']
+seeds = [i for i in range(30)]
 
 
 if False:  # ObGD - ObGD (standard)
@@ -71,7 +71,7 @@ if True:  # Obo - Obo (standard)
         "env_name":             environments,
         "policy_optimizer":     ['Obo'],
         "policy_lamda":         [0.8],
-        "policy_kappa":         [20],
+        "policy_kappa":         [20,40,80],
         "policy_momentum":      [0.0],
         "policy_u_trace":       [1],
         "policy_entrywise_normalization": ['RMSProp'],
@@ -84,7 +84,7 @@ if True:  # Obo - Obo (standard)
         "policy_weight_decay":  [0.0],
         "critic_optimizer":     ['Obo'],
         "critic_lamda":         [0.8],
-        "critic_kappa":         [2.0], #[1.0, 1.5, 2.0, 3.0],
+        "critic_kappa":         [2.0, 4.0, 10.0], #[1.0, 1.5, 2.0, 3.0],
         "critic_momentum":      [0.0],
         "critic_u_trace":       [1.0],
         "critic_delta_clip":    ['20_avg_sq_max_20avg__dec_0.9998'],
