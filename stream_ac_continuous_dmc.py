@@ -712,10 +712,10 @@ if __name__ == '__main__':
     # ---- Logging dict ----
     logging_spec = {
         'backend': args.log_backend,
-        'dir': f'{args.log_dir}_{args.env_name}',
+        'dir': f'{args.log_dir}_{args.env_name.split("/")[-1]}',
         'dir_pickle': args.log_dir_for_pickle,
         'level': args.logging_level,
-        'project': f'{args.project}_{args.env_name}',
+        'project': f'{args.project}_{args.env_name.split("/")[-1]}',
         'run_name': args.run_name,
         'uID': args.uID,
     }
