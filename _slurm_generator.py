@@ -86,12 +86,13 @@ def slurm_body(py_args: str, export_path: Path, venv_activate: str, py_entry: st
     except:
         num_gpus = 0
     cuda = "module load cuda\n" if num_gpus>0 else ""
+    # module load mujoco/3.1.6
     return dedent(f"""\
         
         module purge
         module load StdEnv/2023
         module load python/3.10
-        module load mujoco
+        module load mujoco/3.1.6
 
         source {venv_activate}
         export PYTHONNOUSERSITE=1
