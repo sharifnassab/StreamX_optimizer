@@ -697,7 +697,6 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
                                                 'policy':{**{f'{key}':[] for key in keys}, **{f'{key}/{percentile}': [] for key in percentile_keys for percentile in stat_percentiles}},
                                                 'logging_times':[],
                                                 }
-
     for t in range(1, int(total_steps) + 1):
         a = agent.sample_action(s)
         s_prime, r, terminated, truncated, info = env.step(a)
@@ -709,6 +708,9 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
         s = s_prime
 
         if agent.opt_name in ['obobasestats']:
+            if t-1 % 200_000 == 0:
+                print('step', np.round(t-1/1000000.0,3),'m')
+
             for period in periods_of_stat_computation:
                 stat_dict = global_stats_dict[f'period_{period}']
                 tt = (t-1) % period
@@ -722,7 +724,7 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
                         info_for_stat[key]['intended_update'].append(step_info[key].get(f'{key}_intended_update'))
                         info_for_stat[key]['actual_update'].append(step_info[key].get(f'{key}_actual_update'))
                         info_for_stat[key]['update_ratio'].append(step_info[key].get(f'{key}_update_ratio'))
-                        info_for_stat[key]['log_step_size'].append(np.log10(step_info[key].get('step_size', 1e-12)))
+                        info_for_stat[key]['log_step_size'].append(np.log10(np.clip(step_info[key].get('step_size', 1e-12), a_min=1e-12, a_max=None)))
                         info_for_stat[key]['dw_before_delta'].append(step_info[key].get('norm_delta_w_before_delta'))
                         info_for_stat[key]['dw_before_delta_alpha1'].append(step_info[key].get('norm_delta_w_before_delta_alpha1'))
                 if tt == period-1: 
@@ -732,25 +734,25 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
                         significant_update_mask = np.abs(info_for_stat[key]['actual_update']) > 0.1 * mean_norm2_actual_update
                         stat_dict[key]['mean_update_ratio'].append(np.mean(info_for_stat[key]['update_ratio']))
                         stat_dict[key]['mean_update_ratio_of_significant_updates'].append(np.mean(np.array(info_for_stat[key]['update_ratio'])[significant_update_mask]))
-                        stat_dict[key]['mean_log_update_ratio'].append(np.mean(np.log10(np.array(info_for_stat[key]['update_ratio']) + 1e-12)))
-                        stat_dict[key]['mean_log_update_ratio_of_significant_updates'].append(np.mean(np.log10(np.array(info_for_stat[key]['update_ratio'])[significant_update_mask] + 1e-12)))
+                        stat_dict[key]['mean_log_update_ratio'].append(np.mean(np.log10(np.clip(np.array(info_for_stat[key]['update_ratio']), a_min=1e-12, a_max=None))))
+                        stat_dict[key]['mean_log_update_ratio_of_significant_updates'].append(np.mean(np.log10(np.clip(np.array(info_for_stat[key]['update_ratio'])[significant_update_mask], a_min=1e-12, a_max=None))))
                         stat_dict[key]['std_update_ratio'].append(np.std(info_for_stat[key]['update_ratio']))
-                        stat_dict[key]['std_log_update_ratio'].append(np.std(np.log10(np.array(info_for_stat[key]['update_ratio']) + 1e-12)))
+                        stat_dict[key]['std_log_update_ratio'].append(np.std(np.log10(np.clip(np.array(info_for_stat[key]['update_ratio']), a_min=1e-12, a_max=None))))
                         stat_dict[key]['std_update_ratio_of_significant_updates'].append(np.std(np.array(info_for_stat[key ]['update_ratio'])[significant_update_mask]))
-                        stat_dict[key]['std_log_update_ratio_of_significant_updates'].append(np.std(np.log10(np.array(info_for_stat[key]['update_ratio'])[significant_update_mask] + 1e-12)))
+                        stat_dict[key]['std_log_update_ratio_of_significant_updates'].append(np.std(np.log10(np.clip(np.array(info_for_stat[key]['update_ratio'])[significant_update_mask], a_min=1e-12, a_max=None))))
                         for percentile in stat_percentiles:
                             stat_dict[key][f'update_ratio_percentile/{percentile}'].append(np.percentile(info_for_stat[key]['update_ratio'], percentile*100))
                             stat_dict[key][f'update_ratio_percentile_of_significant_updates/{percentile}'].append(np.percentile(np.array(info_for_stat[key]['update_ratio'])[significant_update_mask], percentile*100))
                         
                         dw_before_delta_mean = np.mean(info_for_stat[key]['dw_before_delta'])
                         stat_dict[key]['dw_before_delta_mean'].append(dw_before_delta_mean)
-                        stat_dict[key]['dw_before_delta_mean_log10'].append(np.mean(np.log10(np.array(np.clip(info_for_stat[key]['dw_before_delta'], a_min=1e-12, a_max=None)))))
+                        stat_dict[key]['dw_before_delta_mean_log10'].append(np.mean(np.log10(np.clip(np.array(info_for_stat[key]['dw_before_delta']), a_min=1e-12, a_max=None))))
                         for percentile in stat_percentiles:
                             stat_dict[key][f'dw_before_delta_ratio_percentile/{percentile}'].append(np.percentile(np.array(info_for_stat[key]['dw_before_delta']), percentile*100) / dw_before_delta_mean)
                             stat_dict[key][f'dw_before_delta_ratio_percentile_of_significant_updates/{percentile}'].append(np.percentile(np.array(info_for_stat[key]['dw_before_delta'])[significant_update_mask], percentile*100) / dw_before_delta_mean)
                         dw_before_delta_mean_alpha1 = np.mean(info_for_stat[key]['dw_before_delta_alpha1'])
                         stat_dict[key]['dw_before_delta_mean_alpha1'].append(dw_before_delta_mean_alpha1)
-                        stat_dict[key]['dw_before_delta_mean_alpha1_log10'].append(np.mean(np.log10(np.array(np.clip(info_for_stat[key]['dw_before_delta_alpha1'], a_min=1e-12, a_max=None)))))
+                        stat_dict[key]['dw_before_delta_mean_alpha1_log10'].append(np.mean(np.log10(np.clip(np.array(info_for_stat[key]['dw_before_delta_alpha1']), a_min=1e-12, a_max=None))))
                         for percentile in stat_percentiles:
                             stat_dict[key][f'dw_before_delta_alpha1_ratio_percentile/{percentile}'].append(np.percentile(np.array(info_for_stat[key]['dw_before_delta_alpha1']), percentile*100) / dw_before_delta_mean_alpha1)
                             stat_dict[key][f'dw_before_delta_alpha1_ratio_percentile_of_significant_updates/{percentile}'].append(np.percentile(np.array(info_for_stat[key]['dw_before_delta_alpha1'])[significant_update_mask], percentile*100) / dw_before_delta_mean_alpha1)
