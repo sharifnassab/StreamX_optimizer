@@ -1,6 +1,7 @@
 import time
 start_time = time.time()
 import os, pickle, argparse
+from copy import deepcopy
 os.environ["GYM_DISABLE_PLUGIN_AUTOLOAD"] = "1"
 import torch
 import numpy as np
@@ -27,9 +28,11 @@ from optim import ObGDm as ObGDm_Optimizer
 from optim import Obtm as Obtm_Optimizer
 from optim import Obonz as Obonz_Optimizer
 from optim import Obo as Obo_Optimizer
+from optim import Obo_no_update as Obo_no_update_Optimizer
 from optim import OboC as OboC_Optimizer
 from time_wrapper import AddTimeInfo
 from normalization_wrappers import NormalizeObservation, ScaleReward
+from sampling_without_state_change_wrapper import step_without_changing_env, verify_step_without_changing_env
 from sparse_init import sparse_init
 
 # NEW: our tiny logger (wandb or tensorboard)
@@ -62,7 +65,7 @@ class Actor_old(nn.Module):
         pre_std = self.linear_std(x)
         std = F.softplus(pre_std)
         return mu, std
-
+    
 class Actor(nn.Module):
     def __init__(self, n_obs=11, n_actions=3, hidden_depth=2, hidden_width=128, initialization_sparsity=0.9):
         super(Actor, self).__init__()
@@ -227,6 +230,8 @@ class StreamAC(nn.Module):
         delta_clip = spec.get('delta_clip', 'none')
         delta_norm = spec.get('delta_norm', 'none')
 
+        lambda_for_no_update = float(spec.get('lambda_for_no_update', 0.0))
+
 
         if opt_name == 'obgd':
             return ObGD_Optimizer(params, lr=lr, gamma=gamma, lamda=lamda, kappa=kappa)
@@ -304,6 +309,12 @@ class StreamAC(nn.Module):
             return Obo_Optimizer(
                 params, gamma=gamma, lamda=lamda, kappa=kappa,  weight_decay=weight_decay, sig_power=sig_power, delta_clip=delta_clip,  delta_norm=delta_norm, momentum=momentum,
                 entrywise_normalization=entrywise_normalization, beta2=beta2, in_trace_sample_scaling=in_trace_sample_scaling
+            )
+        
+        if opt_name == 'obo_no_update':
+            return Obo_no_update_Optimizer(
+                params, gamma=gamma, lamda=lamda, kappa=kappa,  weight_decay=weight_decay, sig_power=sig_power, delta_clip=delta_clip,  delta_norm=delta_norm, momentum=momentum,
+                entrywise_normalization=entrywise_normalization, beta2=beta2, in_trace_sample_scaling=in_trace_sample_scaling, lambda_for_no_update=lambda_for_no_update
             )
         
         if opt_name == 'oboc':
@@ -398,6 +409,64 @@ class StreamAC(nn.Module):
 
         return  {'policy':info_policy, 'critic':info_critic, 'observer':info_observer}
 
+
+
+    def compute_updates_without_updating(self, s, env, action_batch_size=100):
+        verbose=False
+
+        s_tensor = torch.tensor(np.array(s), dtype=torch.float)
+        with torch.no_grad():
+            v_s = self.v(s_tensor)
+        
+        for ii in range(action_batch_size):
+            a_sampled = self.sample_action(s)
+            s_prime_smapled, r_sampled, terminated_sampled, truncated_sampled, info_sampled = step_without_changing_env(env, action=a_sampled, verbose=verbose)
+
+            terminated_mask = 0 if terminated_sampled else 1 
+            done = 1 if terminated_sampled or truncated_sampled else 0
+            a = torch.tensor(np.array(a_sampled), dtype=torch.float)
+            r = torch.tensor(np.array(r_sampled), dtype=torch.float)
+            s_prime = torch.tensor(np.array(s_prime_smapled), dtype=torch.float)
+            terminated_mask_t = torch.tensor(np.array(terminated_mask), dtype=torch.float)
+
+            with torch.no_grad():
+                v_prime = self.v(s_prime)
+
+            td_target_policy = r + self.gamma_policy * v_prime * terminated_mask_t
+            delta_policy = td_target_policy - v_s
+
+            mu, std = self.pi(s_tensor)
+            dist = Normal(mu, std)
+
+            log_prob_pi = -(dist.log_prob(a)).sum()
+            entropy_pi = -self.entropy_coeff * dist.entropy().sum() * torch.sign(delta_policy).item()
+            self.optimizer_policy.zero_grad()
+
+            (log_prob_pi + entropy_pi).backward()
+            w_update, w_update_alpha1, info = self.optimizer_policy.step_without_update(delta_policy.item(), reset=done)
+
+            if ii == 0:
+                average_update = w_update
+                average_update_alpha1 = w_update_alpha1
+            else:
+                # average weighted by 1/ii
+                iii = float(ii)
+                average_update = [ (avg * iii + new)/(iii + 1) for avg, new in zip(average_update, w_update) ]
+                average_update_alpha1 = [ (avg * iii + new)/(iii + 1) for avg, new in zip(average_update_alpha1, w_update_alpha1) ]
+
+        norm_avg_update = torch.sqrt(sum([u.norm()**2 for u in average_update])).item()
+        norm_avg_update_alpha1 = torch.sqrt(sum([u.norm()**2 for u in average_update_alpha1])).item()
+        correlation = sum([(u1*u2).sum().item() for u1, u2 in zip(average_update, average_update_alpha1)]) 
+        correlation_coeff = correlation / (norm_avg_update * norm_avg_update_alpha1 + 1e-12)
+        
+        info['average_update_norm'] = norm_avg_update
+        info['average_update_alpha1_norm'] = norm_avg_update_alpha1
+        info['norm_ratio_update_over_alpha1'] = norm_avg_update / (norm_avg_update_alpha1 + 1e-12)
+        info['correlation_coeff'] = correlation_coeff
+        
+        return  correlation_coeff, info
+
+
 def compute_monte_carlo_v_at_the_end_of_episode(list_ep_R, gamma):
     G = 0.0
     list_v = []
@@ -490,14 +559,28 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
     epoch_start_time = time.time()
     
 
+    training_steps = 1000_000
+    eval_steps = 1000
+    action_batch_size=1000
+    list_correlation_coeffs = []
     for t in range(1, int(total_steps) + 1):
+
+        if t>training_steps:
+            correlation_coeff, info_temp = agent.compute_updates_without_updating(s, env, action_batch_size=action_batch_size)
+            list_correlation_coeffs.append(correlation_coeff)
+            print(t, ', \t', correlation_coeff)
+        if t> training_steps + eval_steps:
+            break
+
         a = agent.sample_action(s)
         s_prime, r, terminated, truncated, info = env.step(a)
+
 
         list_ep_R.append(r)
         list_ep_S.append(s)
 
-        step_info = agent.update_params(s, a, r, s_prime, terminated, truncated,)
+        if t<=training_steps:
+            step_info = agent.update_params(s, a, r, s_prime, terminated, truncated,)
         s = s_prime
 
         for net in ['critic', 'observer']:
@@ -598,7 +681,18 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
             list_ep_R, list_ep_v, list_ep_S, list_policy_delta_used = [], {'critic':[], 'observer':[]}, [], []
             episode_number+=1
 
-    print(f"total time = {time.gmtime(int(time.time() - start_time))}")
+
+    stats_of_correlation_coefficients = {
+        'list_correlation_coeffs': list_correlation_coeffs,
+        'mean': np.mean(list_correlation_coeffs),
+        'std': np.std(list_correlation_coeffs),
+        'percentiles': {percentile: np.percentile(list_correlation_coeffs, percentile) for percentile in [0,1,2,5,10,25,50,75,90,95,98,99]}
+    }
+    print(f'stats of correlation coefficients:   \n  mean={stats_of_correlation_coefficients["mean"]}, \n  std={stats_of_correlation_coefficients["std"]}')
+    for percentile in [0,1,2,5,10,20,25,50,75,80,90,95,98,99]:
+        print(f"  {percentile}th percentile: {stats_of_correlation_coefficients['percentiles'][percentile]}")
+
+    print(f"\ntotal time = {time.gmtime(int(time.time() - start_time))}")
 
     env.close()
     logger.finish()
@@ -611,13 +705,13 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
         with open(os.path.join(save_dir, "seed_{}.pkl".format(seed)), "wb") as f:
-            pickle.dump((returns, term_time_steps, env_name), f)
+            pickle.dump((stats_of_correlation_coefficients, term_time_steps, env_name), f)
 
 
 
 
 if __name__ == '__main__':
-    optimizer_choices = ['ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD', 'ObtC', 'ObtN', 'Obt', 'Obtnnz', 'Obonz', 'ObGDN', 'ObGDm', 'ObtCm', 'Obtm', 'Obo', 'OboC']
+    optimizer_choices = ['ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD', 'ObtC', 'ObtN', 'Obt', 'Obtnnz', 'Obonz', 'ObGDN', 'ObGDm', 'ObtCm', 'Obtm', 'Obo', 'OboC', 'Obo_no_update', 'none', 'monte_carlo']
     parser = argparse.ArgumentParser(description='Stream AC(λ)')
     parser.add_argument('--env_name', type=str, default='Ant-v5')  # HalfCheetah-v4
     parser.add_argument('--seed', type=int, default=0)
@@ -631,6 +725,7 @@ if __name__ == '__main__':
     parser.add_argument('--policy_kappa', type=float, default=3.0)
     parser.add_argument('--policy_gamma', type=float, default=0.99)
     parser.add_argument('--policy_lamda', type=float, default=0.0)
+    parser.add_argument('--policy_lambda_for_no_update', type=float, default=0.0)
     parser.add_argument('--policy_lr', type=float, default=1.0)
     parser.add_argument('--policy_momentum', type=float, default=0.0)
     parser.add_argument('--policy_entropy_coeff', type=float, default=0.01)  # was entropy_coeff
@@ -712,11 +807,12 @@ if __name__ == '__main__':
         'Obt':          shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'delta_clip', 'delta_norm'],
         'Obtm':         shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'delta_clip', 'delta_norm', 'momentum'],
         'Obtnnz':       shared_params + ['entrywise_normalization', 'beta2', 'u_trace', 'delta_clip', 'delta_norm'],
-        'Obonz':      shared_params + ['entrywise_normalization', 'beta2', 'u_trace', 'delta_clip', 'delta_norm', 'momentum'],
+        'Obonz':        shared_params + ['entrywise_normalization', 'beta2', 'u_trace', 'delta_clip', 'delta_norm', 'momentum'],
         'ObGDN':        shared_params + ['lr', 'delta_clip', 'delta_norm'],
         'ObGDm':        shared_params + ['lr', 'momentum'],
-        'Obo':         shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'delta_clip', 'delta_norm', 'momentum', 'u_trace'],
-        'OboC':        shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'momentum', 'u_trace'],
+        'Obo':          shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'delta_clip', 'delta_norm', 'momentum', 'u_trace'],
+        'Obo_no_update':shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'delta_clip', 'delta_norm', 'momentum', 'u_trace', 'lambda_for_no_update'],
+        'OboC':         shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'momentum', 'u_trace'],
         }
 
     def build_spec(kind, args, required_optimizer_params) -> dict:

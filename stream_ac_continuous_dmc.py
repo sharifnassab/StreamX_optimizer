@@ -33,6 +33,7 @@ from optim import Obtm as Obtm_Optimizer
 from optim import Obonz as Obonz_Optimizer
 from optim import Obo as Obo_Optimizer
 from optim import OboC as OboC_Optimizer
+from optim import OboDMC_test as OboDMC_test_Optimizer
 from time_wrapper import AddTimeInfo
 from normalization_wrappers import NormalizeObservation, ScaleReward
 from sparse_init import sparse_init
@@ -264,6 +265,13 @@ class StreamAC(nn.Module):
                 entrywise_normalization=entrywise_normalization, beta2=beta2, in_trace_sample_scaling=in_trace_sample_scaling
             )
         
+        if opt_name == 'obodmc_test':
+            return OboDMC_test_Optimizer(
+                params, gamma=gamma, lamda=lamda, kappa=kappa,  weight_decay=weight_decay, sig_power=sig_power, delta_clip=delta_clip,  delta_norm=delta_norm, momentum=momentum,
+                entrywise_normalization=entrywise_normalization, beta2=beta2, in_trace_sample_scaling=in_trace_sample_scaling
+            )
+        
+        
         if opt_name == 'oboc':
             return OboC_Optimizer(
                 params, gamma=gamma, lamda=lamda, kappa=kappa, weight_decay=weight_decay, sig_power=sig_power, momentum=momentum, 
@@ -465,11 +473,15 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
     max_epoch_time = 0.0
     episode_number = 0
     epoch_start_time = time.time()
-    
+    step_in_episode = 0
 
     for t in range(1, int(total_steps) + 1):
         a = agent.sample_action(s)
         s_prime, r, terminated, truncated, info = env.step(a)
+
+        step_in_episode+=1
+        if step_in_episode == 1:
+            first_reward_in_episode = info["reward_immediate"]
 
         list_ep_R.append(r)
         list_ep_S.append(s)
@@ -555,7 +567,8 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
 
 
             if debug:
-                print(f"Episodic Return: {ep_return}, Time Step {t}")
+                #print(f"Episodic Return: {ep_return}, Time Step {t}")
+                print(f"Episode Return: {ep_return},\t Time Step: {t},\t  1000xfirst_step_reward: {1000*first_reward_in_episode}")
 
             # time guard
             max_epoch_time = max(time.time() - epoch_start_time, max_epoch_time)
@@ -574,6 +587,7 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
             s, _ = env.reset()
             list_ep_R, list_ep_v, list_ep_S, list_policy_delta_used = [], {'critic':[], 'observer':[]}, [], []
             episode_number+=1
+            step_in_episode = 0
 
     print(f"total time = {time.gmtime(int(time.time() - start_time))}")
 
@@ -594,7 +608,7 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
 
 
 if __name__ == '__main__':
-    optimizer_choices = ['ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD', 'ObtC', 'ObtN', 'Obt', 'Obtnnz', 'Obonz', 'ObGDN', 'ObGDm', 'ObtCm', 'Obtm', 'Obo', 'OboC']
+    optimizer_choices = ['ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD', 'ObtC', 'ObtN', 'Obt', 'Obtnnz', 'Obonz', 'ObGDN', 'ObGDm', 'ObtCm', 'Obtm', 'Obo', 'OboC', 'OboDMC_test']
     parser = argparse.ArgumentParser(description='Stream AC(λ)')
     parser.add_argument('--env_name', type=str, default='Ant-v5')  # HalfCheetah-v4
     parser.add_argument('--seed', type=int, default=0)
@@ -694,6 +708,7 @@ if __name__ == '__main__':
         'ObGDm':        shared_params + ['lr', 'momentum'],
         'Obo':         shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'delta_clip', 'delta_norm', 'momentum', 'u_trace'],
         'OboC':        shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'momentum', 'u_trace'],
+        'OboDMC_test': shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'delta_clip', 'delta_norm', 'momentum', 'u_trace'],
         }
 
     def build_spec(kind, args, required_optimizer_params) -> dict:

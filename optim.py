@@ -8,6 +8,226 @@ from MetaZero_loss_calculation import error_critic
 
 
 
+class Obo_no_update(torch.optim.Optimizer): # same as Obn but also has delta_clipping
+    def __init__(self, params, lr=1.0, gamma=0.99, lamda=0.0, kappa=2.0, delta_clip='none', delta_norm='none', beta2=0.999, entrywise_normalization='none', sig_power=2, in_trace_sample_scaling=True, weight_decay=0.0, momentum=0.0, u_trace=1.0, lambda_for_no_update=0.0):
+        defaults = dict(lr=lr, gamma=gamma, lamda=lamda, beta2=beta2, beta_momentum=momentum, lambda_for_no_update=lambda_for_no_update)
+        self.gamma = gamma
+        self.lamda = lamda
+        self.lambda_for_no_update=lambda_for_no_update
+        self.kappa = kappa
+        self.weight_decay = weight_decay
+        self.sig_power = sig_power
+        self.u_trace = u_trace
+        self.u_bar = 0.0
+        self.sigma = 0.0
+        self.t_val = 0
+        self.eta=torch.tensor(1/kappa)
+        self.entrywise_normalization = entrywise_normalization # 'none' or 'RMSprop' or 'RMSPropInTrace' (meaning z accumulates entrywised scaled grads)  (default: RMSProp)
+        self.in_trace_sample_scaling = in_trace_sample_scaling  # if True, z accumulates grads scaled down by their norms. This can be applied with or without entrywise_normalization.
+        self.delta_clipper = delta_clipper(clip_type=delta_clip, normalization_type=delta_norm)
+        super(Obo_no_update, self).__init__(params, defaults)
+
+    def step(self, delta, reset=False):
+        self.t_val += 1
+        norm_grad = 0
+        for group in self.param_groups:
+            for p in group["params"]:
+                state = self.state[p]
+                if len(state) == 0:
+                    state["entrywise_squared_grad"] = torch.ones_like(p.data)
+                v = state["entrywise_squared_grad"]
+                if self.entrywise_normalization.lower() in ['rmsprop']:
+                    v.mul_(group["beta2"]).addcmul_(p.grad, p.grad, value=1.0 - group["beta2"])
+                    v_hat = (v / (1.0 - group["beta2"] ** self.t_val)).sqrt() + 1e-8
+                    state["rmsprop_v_hat"] = v_hat
+                elif self.entrywise_normalization.lower()=='none':
+                    v_hat = 1.0
+                norm_grad += ((p.grad.square() / v_hat).sum()).abs().item()
+        
+
+        if self.in_trace_sample_scaling in [True, 'True', 'true', 1, '1']:
+            scale_of_sample_in_trace = 1.0/norm_grad
+        else:
+            scale_of_sample_in_trace = 1.0
+
+        z_sum = 0.0
+        for group in self.param_groups:
+            for p in group["params"]:
+                state = self.state[p]
+                if "eligibility_trace" not in state:
+                    state["eligibility_trace"] = torch.zeros_like(p.data)
+                e = state["eligibility_trace"]
+                v = state["entrywise_squared_grad"]
+                if self.entrywise_normalization.lower() == 'rmsprop':
+                    v_hat_for_trace_norm = state["rmsprop_v_hat"] 
+                elif self.entrywise_normalization.lower() == 'none':
+                    v_hat_for_trace_norm = 1.0
+                else:
+                    raise(ValueError(f'     {self.entrywise_normalization}     not supported'))
+                
+                e.mul_(group["gamma"] * group["lamda"]).add_(p.grad, alpha=scale_of_sample_in_trace)
+                z_sum += ((e.square() / v_hat_for_trace_norm).sum()).abs().item()
+        
+        self.sigma +=  (1-self.gamma*self.lamda) * (norm_grad**(self.sig_power/2.0)-self.sigma)
+        norm_normalizer = ((self.sigma/(1-(self.gamma*self.lamda)**self.t_val)) + 1e-12) ** (1.0/self.sig_power)
+        z_normalizer = math.sqrt(z_sum/(1-(self.gamma*self.lamda)**self.t_val))
+        u = norm_normalizer * z_normalizer
+        self.u_bar +=  self.u_trace * (u-self.u_bar)
+        normalizer_ = max(u, math.sqrt(u*self.u_bar/(1-(1-self.u_trace)**self.t_val)))
+        dot_product =  self.kappa * normalizer_
+        step_size = 1 / dot_product
+        safe_delta = self.delta_clipper.clip_and_norm(delta)
+        #print(abs(safe_delta), safe_delta/delta)
+
+        for group in self.param_groups:
+            for p in group["params"]:
+                state = self.state[p]
+                e = state["eligibility_trace"]
+                if "momentum" not in state:
+                    state["momentum"] = torch.zeros_like(p.data)
+                m = state["momentum"]
+                m.mul_(group["beta_momentum"]).add_(e, alpha=-safe_delta*step_size)
+                if self.weight_decay > 0.0:
+                    p.data.mul_(1.0-self.weight_decay/self.kappa)
+                if self.entrywise_normalization.lower() == 'rmsprop':
+                    p.data.addcdiv_(m, state["rmsprop_v_hat"], value=1-group["beta_momentum"])
+                elif self.entrywise_normalization.lower() == 'none':
+                    p.data.add_(m, alpha=1-group["beta_momentum"])
+                if reset:
+                    e.zero_()
+
+        info = {'M':dot_product, 'clipped_step_size':step_size, 'delta':delta, 'delta_used':safe_delta, 'abs_delta':abs(delta), 'norm1_eligibility_trace':z_sum}
+        return info
+
+
+
+    def step_without_update(self, delta, reset=False):
+        with torch.no_grad():
+            t_next = self.t_val + 1
+            norm_grad = 0.0
+
+            v_hat_cache = {}
+            e_next_cache = {}
+            updates = []
+            updates_alpha1 = []
+
+            entrywise_mode = self.entrywise_normalization.lower()
+
+            # First pass: virtual RMSProp update and norm_grad
+            for group in self.param_groups:
+                beta2 = group["beta2"]
+
+                for p in group["params"]:
+                    if p.grad is None:
+                        continue
+
+                    state = self.state.get(p, {})
+                    grad = p.grad
+                    v_prev = state.get("entrywise_squared_grad", torch.ones_like(p.data))
+
+                    if entrywise_mode == "rmsprop":
+                        v_next = v_prev * beta2 + grad.square() * (1.0 - beta2)
+                        v_hat = (v_next / (1.0 - beta2 ** t_next)).sqrt() + 1e-8
+                    elif entrywise_mode == "none":
+                        v_hat = 1.0
+                    else:
+                        raise ValueError(f"{self.entrywise_normalization} not supported")
+
+                    v_hat_cache[p] = v_hat
+                    norm_grad += ((grad.square() / v_hat).sum()).abs().item()
+
+            if self.in_trace_sample_scaling in [True, 'True', 'true', 1, '1']:
+                scale_of_sample_in_trace = 1.0 / norm_grad
+            else:
+                scale_of_sample_in_trace = 1.0
+
+            # Second pass: virtual trace update and z_sum
+            z_sum = 0.0
+            for group in self.param_groups:
+                gl_group = group["gamma"] * group["lambda_for_no_update"]
+
+                for p in group["params"]:
+                    if p.grad is None:
+                        continue
+
+                    state = self.state.get(p, {})
+                    grad = p.grad
+                    e_prev = state.get("eligibility_trace", torch.zeros_like(p.data))
+
+                    if entrywise_mode == "rmsprop":
+                        v_hat_for_trace_norm = v_hat_cache[p]
+                    elif entrywise_mode == "none":
+                        v_hat_for_trace_norm = 1.0
+                    else:
+                        raise ValueError(f"{self.entrywise_normalization} not supported")
+
+                    e_next = e_prev * gl_group + grad * scale_of_sample_in_trace
+                    e_next_cache[p] = e_next
+                    z_sum += ((e_next.square() / v_hat_for_trace_norm).sum()).abs().item()
+
+            # Virtual scalar-state update
+            gl = self.gamma * self.lambda_for_no_update
+            sigma_next = self.sigma + (1 - gl) * (norm_grad ** (self.sig_power / 2.0) - self.sigma)
+            norm_normalizer = ((sigma_next / (1 - (gl ** t_next))) + 1e-12) ** (1.0 / self.sig_power)
+            z_normalizer = math.sqrt(z_sum / (1 - (gl ** t_next)))
+            u = norm_normalizer * z_normalizer
+            u_bar_next = self.u_bar + self.u_trace * (u - self.u_bar)
+            normalizer_ = max(u, math.sqrt(u * u_bar_next / (1 - (1 - self.u_trace) ** t_next)))
+            dot_product = self.kappa * normalizer_
+            step_size = 1.0 / dot_product
+
+            # Virtual delta clipping without mutating the real clipper
+            safe_delta = deepcopy(self.delta_clipper).clip_and_norm(delta)
+
+            # Final pass: compute would-be parameter updates
+            for group in self.param_groups:
+                beta_momentum = group["beta_momentum"]
+
+                for p in group["params"]:
+                    if p.grad is None:
+                        continue
+
+                    state = self.state.get(p, {})
+                    e_next = e_next_cache[p]
+                    m_prev = state.get("momentum", torch.zeros_like(p.data))
+
+                    if beta_momentum>0:
+                        raise ValueError("momentum > 0 is not supported in step_without_update because it would require a third pass to compute m_next")
+                    m_next = m_prev * beta_momentum + e_next * (-safe_delta)
+
+                    update = torch.zeros_like(p.data)
+                    update_alpha1 = torch.zeros_like(p.data)
+
+                    if self.weight_decay > 0.0:
+                        update.add_(p.data, alpha=-(self.weight_decay / self.kappa))
+                        update_alpha1.add_(p.data, alpha=-(self.weight_decay / self.kappa))
+
+                    if entrywise_mode == "rmsprop":
+                        update.addcdiv_(m_next, v_hat_cache[p], value=(1 - beta_momentum)*step_size)
+                        update_alpha1.addcdiv_(m_next, v_hat_cache[p], value=1 - beta_momentum)
+                    elif entrywise_mode == "none":
+                        update.add_(m_next, alpha=(1 - beta_momentum)*step_size)
+                        update_alpha1.add_(m_next, alpha=1 - beta_momentum)
+                    else:
+                        raise ValueError(f"{self.entrywise_normalization} not supported")
+
+                    updates.append(update)
+                    updates_alpha1.append(update_alpha1)
+
+            info = {
+                'M': dot_product,
+                'clipped_step_size': step_size,
+                'delta': delta,
+                'delta_used': safe_delta,
+                'abs_delta': abs(delta),
+                'norm1_eligibility_trace': z_sum,
+                't_next_virtual': t_next,
+                'sigma_next_virtual': sigma_next,
+                'u_bar_next_virtual': u_bar_next,
+            }
+
+            return updates, updates_alpha1, info
+
 class OboMetaZero2sided(): 
     def __init__(self, network, role, gamma=0.99, lamda=0.0, kappa=2.0, entropy_coeff=0.01, delta_clip='none', delta_norm='none', beta2=0.999,  rmspower=2.0, entrywise_normalization='none', 
             weight_decay=0.0, momentum=0.0, meta_stepsize=1e-3, beta2_meta=0.999, stepsize_parameterization='exp', epsilon_meta=1e-3, meta_loss_type='none', meta_shadow_dist_reg=0.0, clip_zeta_meta='none'):
@@ -702,6 +922,99 @@ class OboMeta_old(torch.optim.Optimizer):
         return info
 
 
+
+
+class OboDMC_test(torch.optim.Optimizer): # same as Obn but also has delta_clipping
+    def __init__(self, params, lr=1.0, gamma=0.99, lamda=0.0, kappa=2.0, delta_clip='none', delta_norm='none', beta2=0.999, entrywise_normalization='none', sig_power=2, in_trace_sample_scaling=True, weight_decay=0.0, momentum=0.0, u_trace=1.0):
+        defaults = dict(lr=lr, gamma=gamma, lamda=lamda, beta2=beta2, beta_momentum=momentum)
+        self.gamma = gamma
+        self.lamda = lamda
+        self.kappa = kappa
+        self.weight_decay = weight_decay
+        self.sig_power = sig_power
+        self.u_trace = u_trace
+        self.u_bar = 0.0
+        self.sigma = 0.0
+        self.t_val = 0
+        self.eta=torch.tensor(1/kappa)
+        self.entrywise_normalization = entrywise_normalization # 'none' or 'RMSprop' or 'RMSPropInTrace' (meaning z accumulates entrywised scaled grads)  (default: RMSProp)
+        self.in_trace_sample_scaling = in_trace_sample_scaling  # if True, z accumulates grads scaled down by their norms. This can be applied with or without entrywise_normalization.
+        self.delta_clipper = delta_clipper(clip_type=delta_clip, normalization_type=delta_norm)
+        super(OboDMC_test, self).__init__(params, defaults)
+
+    def step(self, delta, reset=False):
+        self.t_val += 1
+        norm_grad = 0
+        for group in self.param_groups:
+            for p in group["params"]:
+                state = self.state[p]
+                if len(state) == 0:
+                    state["entrywise_squared_grad"] = torch.ones_like(p.data)
+                v = state["entrywise_squared_grad"]
+                if self.entrywise_normalization.lower() in ['rmsprop']:
+                    v.mul_(group["beta2"]).addcmul_(p.grad, p.grad, value=1.0 - group["beta2"])
+                    v_hat = (v / (1.0 - group["beta2"] ** self.t_val)).sqrt() + 1e-8
+                    state["rmsprop_v_hat"] = v_hat
+                elif self.entrywise_normalization.lower()=='none':
+                    v_hat = 1.0
+                norm_grad += ((p.grad.square() / v_hat).sum()).abs().item()
+        
+
+        if self.in_trace_sample_scaling in [True, 'True', 'true', 1, '1']:
+            scale_of_sample_in_trace = 1.0/norm_grad
+        else:
+            scale_of_sample_in_trace = 1.0
+
+        z_sum = 0.0
+        for group in self.param_groups:
+            for p in group["params"]:
+                state = self.state[p]
+                if "eligibility_trace" not in state:
+                    state["eligibility_trace"] = torch.zeros_like(p.data)
+                e = state["eligibility_trace"]
+                v = state["entrywise_squared_grad"]
+                if self.entrywise_normalization.lower() == 'rmsprop':
+                    v_hat_for_trace_norm = state["rmsprop_v_hat"] 
+                elif self.entrywise_normalization.lower() == 'none':
+                    v_hat_for_trace_norm = 1.0
+                else:
+                    raise(ValueError(f'     {self.entrywise_normalization}     not supported'))
+                
+                e.mul_(group["gamma"] * group["lamda"]).add_(p.grad, alpha=scale_of_sample_in_trace)
+                z_sum += ((e.square() / v_hat_for_trace_norm).sum()).abs().item()
+        
+        #sigma_decay = self.gamma*self.lamda
+        sigma_decay = .999
+        self.sigma +=  (1-sigma_decay) * (norm_grad**(self.sig_power/2.0)-self.sigma)
+        norm_normalizer = ((self.sigma/(1-sigma_decay**self.t_val)) + 1e-12) ** (1.0/self.sig_power)
+        z_normalizer = math.sqrt(z_sum/(1-(self.gamma*self.lamda)**self.t_val))
+        u = norm_normalizer * z_normalizer
+        self.u_bar +=  self.u_trace * (u-self.u_bar)
+        normalizer_ = max(u, math.sqrt(u*self.u_bar/(1-(1-self.u_trace)**self.t_val)))
+        dot_product =  self.kappa * normalizer_
+        step_size = 1 / dot_product
+        safe_delta = self.delta_clipper.clip_and_norm(delta)
+        #print(abs(safe_delta), safe_delta/delta)
+
+        for group in self.param_groups:
+            for p in group["params"]:
+                state = self.state[p]
+                e = state["eligibility_trace"]
+                if "momentum" not in state:
+                    state["momentum"] = torch.zeros_like(p.data)
+                m = state["momentum"]
+                m.mul_(group["beta_momentum"]).add_(e, alpha=-safe_delta*step_size)
+                if self.weight_decay > 0.0:
+                    p.data.mul_(1.0-self.weight_decay/self.kappa)
+                if self.entrywise_normalization.lower() == 'rmsprop':
+                    p.data.addcdiv_(m, state["rmsprop_v_hat"], value=1-group["beta_momentum"])
+                elif self.entrywise_normalization.lower() == 'none':
+                    p.data.add_(m, alpha=1-group["beta_momentum"])
+                if reset:
+                    e.zero_()
+
+        info = {'M':dot_product, 'clipped_step_size':step_size, 'delta':delta, 'delta_used':safe_delta, 'abs_delta':abs(delta), 'norm1_eligibility_trace':z_sum, 'delta_clip_cap':self.delta_clipper._bias_corrected_avg() * self.delta_clipper.cap_mult}
+        return info
 
 
 class Obo(torch.optim.Optimizer): # same as Obn but also has delta_clipping
