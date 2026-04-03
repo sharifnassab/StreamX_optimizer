@@ -8,6 +8,78 @@ from MetaZero_loss_calculation import error_critic
 
 
 
+class RMSProp_divided_by_norm(torch.optim.Optimizer): # same as Obn but also has delta_clipping
+    def __init__(self, params, lr=1.0, gamma=0.99, lamda=0.0, kappa=2.0, beta2=0.999):
+        defaults = dict(lr=lr, gamma=gamma, lamda=lamda, beta2=beta2)
+        self.gamma = gamma
+        self.lamda = lamda
+        self.kappa = kappa
+        self.t_val = 0
+        self.eta=torch.tensor(1/kappa)
+        super(RMSProp_divided_by_norm, self).__init__(params, defaults)
+    
+    def step(self, delta, reset=False):
+        self.t_val += 1
+        norm_g = 0
+        for group in self.param_groups:
+            for p in group["params"]:
+                state = self.state[p]
+                if "eligibility_trace" not in state:
+                    state["eligibility_trace"] = torch.zeros_like(p.data)
+                e = state["eligibility_trace"]
+                e.mul_(group["gamma"] * group["lamda"]).add_(p.grad)
+
+                if "entrywise_squared_grad" not in state:
+                    state["entrywise_squared_grad"] = torch.ones_like(p.data)
+                v = state["entrywise_squared_grad"]
+                v.mul_(group["beta2"]).add_((delta*e).square(),  alpha=1.0-group["beta2"])
+                v_hat = (v / (1.0 - group["beta2"] ** self.t_val)).sqrt() + 1e-8
+                
+                norm_g += (((delta*e).square()).sum()).abs().item()
+                p.data.addcdiv_(delta*e, v_hat, value=self.eta/norm_g)
+
+                if reset:
+                    e.zero_()
+
+        info = {}
+        return info
+
+class RMSProp(torch.optim.Optimizer): # same as Obn but also has delta_clipping
+    def __init__(self, params, lr=1.0, gamma=0.99, lamda=0.0, kappa=2.0, beta2=0.999):
+        defaults = dict(lr=lr, gamma=gamma, lamda=lamda, beta2=beta2)
+        self.gamma = gamma
+        self.lamda = lamda
+        self.kappa = kappa
+        self.t_val = 0
+        self.eta=torch.tensor(1/kappa)
+        super(RMSProp, self).__init__(params, defaults)
+
+    def step(self, delta, reset=False):
+        self.t_val += 1
+        #norm_g = 0
+        for group in self.param_groups:
+            for p in group["params"]:
+                state = self.state[p]
+                if "eligibility_trace" not in state:
+                    state["eligibility_trace"] = torch.zeros_like(p.data)
+                e = state["eligibility_trace"]
+                e.mul_(group["gamma"] * group["lamda"]).add_(p.grad)
+
+                if "entrywise_squared_grad" not in state:
+                    state["entrywise_squared_grad"] = torch.ones_like(p.data)
+                v = state["entrywise_squared_grad"]
+                v.mul_(group["beta2"]).add_((delta*e).square(),  alpha=1.0-group["beta2"])
+                v_hat = (v / (1.0 - group["beta2"] ** self.t_val)).sqrt() + 1e-8
+                
+                #norm_g += (((delta*e).square()).sum()).abs().item()
+                p.data.addcdiv_(delta*e, v_hat, value=self.eta)
+
+                if reset:
+                    e.zero_()
+        info = {}
+        return info
+
+
 class Obo_no_update(torch.optim.Optimizer): # same as Obn but also has delta_clipping
     def __init__(self, params, lr=1.0, gamma=0.99, lamda=0.0, kappa=2.0, delta_clip='none', delta_norm='none', beta2=0.999, entrywise_normalization='none', sig_power=2, in_trace_sample_scaling=True, weight_decay=0.0, momentum=0.0, u_trace=1.0, lambda_for_no_update=0.0):
         defaults = dict(lr=lr, gamma=gamma, lamda=lamda, beta2=beta2, beta_momentum=momentum, lambda_for_no_update=lambda_for_no_update)

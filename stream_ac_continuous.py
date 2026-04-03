@@ -28,6 +28,8 @@ from optim import Obtm as Obtm_Optimizer
 from optim import Obonz as Obonz_Optimizer
 from optim import Obo as Obo_Optimizer
 from optim import OboC as OboC_Optimizer
+from optim import RMSProp as RMSProp_Optimizer
+from optim import RMSProp_divided_by_norm as RMSProp_divided_by_norm_Optimizer
 from time_wrapper import AddTimeInfo
 from normalization_wrappers import NormalizeObservation, ScaleReward
 from sparse_init import sparse_init
@@ -304,6 +306,16 @@ class StreamAC(nn.Module):
             return Obo_Optimizer(
                 params, gamma=gamma, lamda=lamda, kappa=kappa,  weight_decay=weight_decay, sig_power=sig_power, delta_clip=delta_clip,  delta_norm=delta_norm, momentum=momentum,
                 entrywise_normalization=entrywise_normalization, beta2=beta2, in_trace_sample_scaling=in_trace_sample_scaling
+            )
+        
+        if opt_name == 'rmsprop_divided_by_norm':
+            return RMSProp_divided_by_norm_Optimizer(
+                params, gamma=gamma, lamda=lamda, kappa=kappa, beta2=beta2
+            )
+        
+        if opt_name == 'rmsprop':
+            return RMSProp_Optimizer(
+                params, gamma=gamma, lamda=lamda, kappa=kappa, beta2=beta2
             )
         
         if opt_name == 'oboc':
@@ -617,7 +629,7 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
 
 
 if __name__ == '__main__':
-    optimizer_choices = ['ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD', 'ObtC', 'ObtN', 'Obt', 'Obtnnz', 'Obonz', 'ObGDN', 'ObGDm', 'ObtCm', 'Obtm', 'Obo', 'OboC']
+    optimizer_choices = ['ObGD', 'ObGD_sq', 'ObGD_sq_plain', 'Obn', 'ObnC', 'ObnN', 'AdaptiveObGD', 'ObtC', 'ObtN', 'Obt', 'Obtnnz', 'Obonz', 'ObGDN', 'ObGDm', 'ObtCm', 'Obtm', 'Obo', 'OboC', 'RMSProp_divided_by_norm', 'RMSProp', 'none', 'monte_carlo']
     parser = argparse.ArgumentParser(description='Stream AC(λ)')
     parser.add_argument('--env_name', type=str, default='Ant-v5')  # HalfCheetah-v4
     parser.add_argument('--seed', type=int, default=0)
@@ -717,6 +729,8 @@ if __name__ == '__main__':
         'ObGDm':        shared_params + ['lr', 'momentum'],
         'Obo':         shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'delta_clip', 'delta_norm', 'momentum', 'u_trace'],
         'OboC':        shared_params + ['entrywise_normalization', 'beta2', 'sig_power', 'in_trace_sample_scaling', 'momentum', 'u_trace'],
+        'RMSProp_divided_by_norm': shared_params + ['lr', 'gamma', 'lamda', 'kappa', 'beta2'],
+        'RMSProp': shared_params + ['lr', 'gamma', 'lamda', 'kappa', 'beta2'],
         }
 
     def build_spec(kind, args, required_optimizer_params) -> dict:
