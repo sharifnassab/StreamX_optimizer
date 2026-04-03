@@ -682,14 +682,15 @@ def main(env_name, seed, total_steps, max_time, policy_spec, critic_spec, observ
             episode_number+=1
 
 
+    list_percentiles_to_report = [0,1,2,5,10,20,25,50,75,80,90,95,98,99]
     stats_of_correlation_coefficients = {
         'list_correlation_coeffs': list_correlation_coeffs,
         'mean': np.mean(list_correlation_coeffs),
         'std': np.std(list_correlation_coeffs),
-        'percentiles': {percentile: np.percentile(list_correlation_coeffs, percentile) for percentile in [0,1,2,5,10,25,50,75,90,95,98,99]}
+        'percentiles': {percentile: np.percentile(list_correlation_coeffs, percentile) for percentile in list_percentiles_to_report}
     }
     print(f'stats of correlation coefficients:   \n  mean={stats_of_correlation_coefficients["mean"]}, \n  std={stats_of_correlation_coefficients["std"]}')
-    for percentile in [0,1,2,5,10,20,25,50,75,80,90,95,98,99]:
+    for percentile in list_percentiles_to_report:
         print(f"  {percentile}th percentile: {stats_of_correlation_coefficients['percentiles'][percentile]}")
 
     print(f"\ntotal time = {time.gmtime(int(time.time() - start_time))}")
