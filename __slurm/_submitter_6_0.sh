@@ -3,8 +3,8 @@
 #SBATCH --time=06:00:00
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=2048M
-#SBATCH --array=1-20
-#SBATCH --output=/home/asharif/scratch/StreamX_optimizer/outputs/2026_04_03__01_18_25__test0/6_0/output_%j.txt
+#SBATCH --array=1-1
+#SBATCH --output=/home/asharif/scratch/StreamX_optimizer/outputs/2026_04_03__01_18_52__test0/6_0/output_%j.txt
 #SBATCH --constraint=granite
 
 module purge
@@ -16,7 +16,7 @@ source ~/venv_streamx/bin/activate
 export PYTHONNOUSERSITE=1
 
 
-$(sed -n "${SLURM_ARRAY_TASK_ID}p" < /home/asharif/scratch/StreamX_optimizer/outputs/2026_04_03__01_18_25__test0/export_6_0.dat)
+$(sed -n "${SLURM_ARRAY_TASK_ID}p" < /home/asharif/scratch/StreamX_optimizer/outputs/2026_04_03__01_18_52__test0/export_6_0.dat)
 echo "Task ${SLURM_ARRAY_TASK_ID} started on $(hostname) at $(date)"
 python3 stream_ac_continuous.py --total_steps=$total_steps --policy_gamma=$policy_gamma --critic_beta2=$critic_beta2 --critic_gamma=$critic_gamma --observer_optimizer=$observer_optimizer --log_backend=$log_backend --log_dir=$log_dir --log_dir_for_pickle=$log_dir_for_pickle --logging_level=$logging_level --project=$project --env_name=$env_name --policy_optimizer=$policy_optimizer --policy_lamda=$policy_lamda --policy_kappa=$policy_kappa --policy_beta2=$policy_beta2 --policy_entropy_coeff=$policy_entropy_coeff --critic_optimizer=$critic_optimizer --critic_lamda=$critic_lamda --critic_kappa=$critic_kappa --seed=$seed --max_time=$max_time --uID=$uID
 echo "Program test finished with exit code $? at: `date`"

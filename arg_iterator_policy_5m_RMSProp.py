@@ -45,14 +45,15 @@ run_description = 'test0'
 
 HYPER_SWEEPS = []
 
-environments = [#'Ant-v4',
+environments = ['Ant-v4',
                 #'HalfCheetah-v4', 
                 # 'Hopper-v4', 
                 # 'Walker2d-v4', 
-                'Humanoid-v4', 
-                'HumanoidStandup-v4'
+                #'Humanoid-v4', 
+                #'HumanoidStandup-v4'
                 ]
 seeds = [i for i in range(10)]
+seeds = [9]
 
 
 if False:  # ObGD - ObGD (standard)
